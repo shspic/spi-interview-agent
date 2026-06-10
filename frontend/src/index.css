@@ -97,3 +97,85 @@ section {
 h1 {
   margin-top: 0;
 }
+
+.upload-panel {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin: 24px 0 12px;
+}
+
+.upload-panel input {
+  padding: 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: white;
+}
+
+.upload-panel button,
+.table-header button,
+.danger-button {
+  padding: 8px 14px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.upload-panel button,
+.table-header button {
+  background: #2563eb;
+  color: white;
+}
+
+.upload-panel button:disabled,
+.table-header button:disabled,
+.danger-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.danger-button {
+  background: #dc2626;
+  color: white;
+}
+
+.hint-text {
+  color: #374151;
+}
+
+.message-text {
+  margin: 12px 0;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.table-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 24px;
+}
+
+.empty-text {
+  color: #6b7280;
+}
+
+.file-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 12px;
+}
+
+.file-table th,
+.file-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #e5e7eb;
+  text-align: left;
+}
+
+.file-table th {
+  background: #f9fafb;
+  font-weight: 700;
+}
