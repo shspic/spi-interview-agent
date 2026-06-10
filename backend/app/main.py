@@ -1,12 +1,23 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.health import router as health_router
+from app.db.database import init_db
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_db()
+    yield
+
 
 app = FastAPI(
     title="AI Interview RAG Coach API",
     description="Backend API for AI Interview RAG Coach",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
