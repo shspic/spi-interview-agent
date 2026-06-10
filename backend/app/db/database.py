@@ -33,3 +33,11 @@ def init_db():
     from app.db import models
 
     Base.metadata.create_all(bind=engine)
+
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()

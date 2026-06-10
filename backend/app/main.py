@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.health import router as health_router
 from app.db.database import init_db
-
+from app.api.files import router as files_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -29,3 +29,4 @@ app.add_middleware(
 )
 
 app.include_router(health_router, prefix="/api", tags=["health"])
+app.include_router(files_router, prefix="/api", tags=["files"])
