@@ -7,6 +7,12 @@ from app.db.models import FileRecord
 from app.services.document_loader import DocumentLoadError, load_document_text
 from app.services.text_splitter import split_text
 
+from app.services.vector_store import (
+    get_vector_store_status,
+    rebuild_vector_store,
+    search_similar_chunks,
+)
+
 router = APIRouter()
 
 
@@ -17,6 +23,10 @@ class PreviewChunksRequest(BaseModel):
     file_id: str
     chunk_size: int = 800
     chunk_overlap: int = 120
+
+class SearchKnowledgeRequest(BaseModel):
+    query: str
+    top_k: int = 5
 
 @router.post(
     "/knowledge/preview-text",
@@ -94,3 +104,36 @@ def preview_chunks(
             for chunk in chunks[:5]
         ],
     }
+
+
+@router.post(
+    "/knowledge/rebuild",
+    summary="重建知识库索引",
+    description="读取所有已上传文件，解析文本、切分 chunks、生成向量，并写入 ChromaDB。",
+)
+def rebuild_knowledge(db: Session = Depends(get_db)):
+    return rebuild_vector_store(db)
+
+
+@router.get(
+    "/knowledge/status",
+    summary="查看知识库状态",
+    description="查看已索引文件数量、失败文件数量和 ChromaDB 中的 chunk 数量。",
+)
+def knowledge_status(db: Session = Depends(get_db)):
+    return get_vector_store_status(db)
+
+
+@router.post(
+    "/knowledge/search",
+    summary="检索知识库",
+    description="根据用户输入的问题，从 ChromaDB 中检索最相似的文本片段。",
+)
+def search_knowledge(request: SearchKnowledgeRequest):
+    try:
+        return search_similar_chunks(
+            query=request.query,
+            top_k=request.top_k,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc

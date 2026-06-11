@@ -12,6 +12,7 @@ class Settings(BaseModel):
     upload_dir: str = "./data/uploads"
     chroma_persist_dir: str = "./data/chroma_db"
     sqlite_db_path: str = "./data/app.db"
+    embedding_model_name: str = "BAAI/bge-small-zh-v1.5"
 
 
 settings = Settings()
