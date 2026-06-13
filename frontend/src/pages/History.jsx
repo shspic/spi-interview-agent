@@ -2,27 +2,64 @@ import { useEffect, useState } from "react";
 
 import apiClient from "../api/client";
 
+const tabs = [
+  {
+    key: "chat",
+    label: "自由问答",
+  },
+  {
+    key: "job_analysis",
+    label: "岗位分析",
+  },
+  {
+    key: "interview",
+    label: "模拟面试",
+  },
+];
+
+function getShortText(text, maxLength = 80) {
+  if (!text) {
+    return "";
+  }
+
+  if (text.length <= maxLength) {
+    return text;
+  }
+
+  return `${text.slice(0, maxLength)}...`;
+}
+
 function History() {
-  const [records, setRecords] = useState([]);
-  const [selectedRecord, setSelectedRecord] = useState(null);
+  const [activeTab, setActiveTab] = useState("chat");
+  const [historyRecords, setHistoryRecords] = useState([]);
+  const [interviewRecords, setInterviewRecords] = useState([]);
+  const [selectedHistoryRecord, setSelectedHistoryRecord] = useState(null);
+  const [selectedInterviewRecord, setSelectedInterviewRecord] = useState(null);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
 
-  const fetchHistory = async () => {
+  const fetchRecords = async (tabKey = activeTab) => {
     try {
       setLoading(true);
       setMessage("正在加载历史记录...");
+      setSelectedHistoryRecord(null);
+      setSelectedInterviewRecord(null);
 
-      const response = await apiClient.get("/api/history", {
-        params: {
-          mode: "chat",
-        },
-      });
+      if (tabKey === "interview") {
+        const response = await apiClient.get("/api/interview-records");
+        setInterviewRecords(response.data.records || []);
+      } else {
+        const response = await apiClient.get("/api/history", {
+          params: {
+            mode: tabKey,
+          },
+        });
+        setHistoryRecords(response.data.records || []);
+      }
 
-      setRecords(response.data.records || []);
       setMessage("历史记录加载成功。");
     } catch (error) {
-      console.error("fetch history error:", error);
+      console.error("fetch records error:", error);
 
       const detail = error.response?.data?.detail;
       setMessage(detail || "获取历史记录失败，请检查后端是否启动。");
@@ -32,17 +69,23 @@ function History() {
   };
 
   useEffect(() => {
-    fetchHistory();
-  }, []);
+    fetchRecords(activeTab);
+  }, [activeTab]);
 
-  const handleViewDetail = async (recordId) => {
+  const handleTabChange = (tabKey) => {
+    setActiveTab(tabKey);
+    setMessage("");
+  };
+
+  const handleViewHistoryDetail = async (recordId) => {
     try {
       setLoading(true);
       setMessage("正在加载历史详情...");
+      setSelectedInterviewRecord(null);
 
       const response = await apiClient.get(`/api/history/${recordId}`);
 
-      setSelectedRecord(response.data);
+      setSelectedHistoryRecord(response.data);
       setMessage("历史详情加载成功。");
     } catch (error) {
       console.error("fetch history detail error:", error);
@@ -54,7 +97,7 @@ function History() {
     }
   };
 
-  const handleDelete = async (recordId) => {
+  const handleDeleteHistory = async (recordId) => {
     const confirmed = window.confirm("确认删除这条历史记录吗？");
 
     if (!confirmed) {
@@ -67,12 +110,12 @@ function History() {
 
       await apiClient.delete(`/api/history/${recordId}`);
 
-      setRecords((prevRecords) =>
+      setHistoryRecords((prevRecords) =>
         prevRecords.filter((record) => record.record_id !== recordId)
       );
 
-      if (selectedRecord?.record_id === recordId) {
-        setSelectedRecord(null);
+      if (selectedHistoryRecord?.record_id === recordId) {
+        setSelectedHistoryRecord(null);
       }
 
       setMessage("历史记录删除成功。");
@@ -86,120 +129,350 @@ function History() {
     }
   };
 
+  const handleViewInterviewDetail = async (sessionId) => {
+    try {
+      setLoading(true);
+      setMessage("正在加载模拟面试记录详情...");
+      setSelectedHistoryRecord(null);
+
+      const response = await apiClient.get(`/api/interview-records/${sessionId}`);
+
+      setSelectedInterviewRecord(response.data);
+      setMessage("模拟面试记录详情加载成功。");
+    } catch (error) {
+      console.error("fetch interview detail error:", error);
+
+      const detail = error.response?.data?.detail;
+      setMessage(detail || "获取模拟面试记录详情失败。");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteInterview = async (sessionId) => {
+    const confirmed = window.confirm("确认删除这条模拟面试记录吗？");
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setMessage("正在删除模拟面试记录...");
+
+      await apiClient.delete(`/api/interview-records/${sessionId}`);
+
+      setInterviewRecords((prevRecords) =>
+        prevRecords.filter((record) => record.session_id !== sessionId)
+      );
+
+      if (selectedInterviewRecord?.session_id === sessionId) {
+        setSelectedInterviewRecord(null);
+      }
+
+      setMessage("模拟面试记录删除成功。");
+    } catch (error) {
+      console.error("delete interview record error:", error);
+
+      const detail = error.response?.data?.detail;
+      setMessage(detail || "删除模拟面试记录失败。");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const renderSourcesTable = (sources) => {
+    if (!sources || sources.length === 0) {
+      return <p className="empty-text">暂无引用来源。</p>;
+    }
+
+    return (
+      <table className="file-table">
+        <thead>
+          <tr>
+            <th>文件名</th>
+            <th>类型</th>
+            <th>Chunk</th>
+            <th>距离</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          {sources.map((source, index) => (
+            <tr key={`${source.file_id}-${source.chunk_index}-${index}`}>
+              <td>{source.filename || "未知文件"}</td>
+              <td>{source.file_type || "-"}</td>
+              <td>{source.chunk_index ?? "-"}</td>
+              <td>
+                {source.distance === null || source.distance === undefined
+                  ? "-"
+                  : Number(source.distance).toFixed(4)}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    );
+  };
+
+  const renderHistoryTable = () => {
+    if (historyRecords.length === 0) {
+      return <p className="empty-text">暂无历史记录。</p>;
+    }
+
+    return (
+      <table className="file-table">
+        <thead>
+          <tr>
+            <th>输入内容</th>
+            <th>类型</th>
+            <th>联网搜索</th>
+            <th>创建时间</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          {historyRecords.map((record) => (
+            <tr key={record.record_id}>
+              <td className="long-cell">{getShortText(record.user_input)}</td>
+              <td>{record.mode}</td>
+              <td>{record.used_web_search ? "是" : "否"}</td>
+              <td>{record.created_at}</td>
+              <td>
+                <div className="table-actions">
+                  <button
+                    type="button"
+                    onClick={() => handleViewHistoryDetail(record.record_id)}
+                    disabled={loading}
+                  >
+                    查看
+                  </button>
+
+                  <button
+                    type="button"
+                    className="danger-button"
+                    onClick={() => handleDeleteHistory(record.record_id)}
+                    disabled={loading}
+                  >
+                    删除
+                  </button>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    );
+  };
+
+  const renderInterviewTable = () => {
+    if (interviewRecords.length === 0) {
+      return <p className="empty-text">暂无模拟面试记录。</p>;
+    }
+
+    return (
+      <table className="file-table">
+        <thead>
+          <tr>
+            <th>面试题</th>
+            <th>类型</th>
+            <th>题号</th>
+            <th>总分</th>
+            <th>创建时间</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          {interviewRecords.map((record) => (
+            <tr key={record.session_id}>
+              <td className="long-cell">{getShortText(record.question)}</td>
+              <td>{record.interview_type}</td>
+              <td>{record.question_index}</td>
+              <td>{record.score_total}</td>
+              <td>{record.created_at}</td>
+              <td>
+                <div className="table-actions">
+                  <button
+                    type="button"
+                    onClick={() => handleViewInterviewDetail(record.session_id)}
+                    disabled={loading}
+                  >
+                    查看
+                  </button>
+
+                  <button
+                    type="button"
+                    className="danger-button"
+                    onClick={() => handleDeleteInterview(record.session_id)}
+                    disabled={loading}
+                  >
+                    删除
+                  </button>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    );
+  };
+
+  const renderSelectedHistoryDetail = () => {
+    if (!selectedHistoryRecord) {
+      return null;
+    }
+
+    const isJobAnalysis = selectedHistoryRecord.mode === "job_analysis";
+
+    return (
+      <div className="history-detail-card">
+        <h2>{isJobAnalysis ? "岗位分析详情" : "自由问答详情"}</h2>
+
+        <div className="detail-block">
+          <h3>{isJobAnalysis ? "岗位 JD" : "用户问题"}</h3>
+          <div className="answer-content">{selectedHistoryRecord.user_input}</div>
+        </div>
+
+        <div className="detail-block">
+          <h3>{isJobAnalysis ? "岗位分析结果" : "AI 回答"}</h3>
+          <div className="answer-content">{selectedHistoryRecord.ai_output}</div>
+        </div>
+
+        <div className="detail-block">
+          <h3>引用来源</h3>
+          {renderSourcesTable(selectedHistoryRecord.sources)}
+        </div>
+      </div>
+    );
+  };
+
+  const renderSelectedInterviewDetail = () => {
+    if (!selectedInterviewRecord) {
+      return null;
+    }
+
+    return (
+      <div className="history-detail-card">
+        <h2>模拟面试记录详情</h2>
+
+        <div className="detail-grid">
+          <p>
+            面试类型：<strong>{selectedInterviewRecord.interview_type}</strong>
+          </p>
+          <p>
+            题号：<strong>{selectedInterviewRecord.question_index}</strong>
+          </p>
+          <p>
+            总分：<strong>{selectedInterviewRecord.score_total}</strong>
+          </p>
+          <p>
+            创建时间：<strong>{selectedInterviewRecord.created_at}</strong>
+          </p>
+        </div>
+
+        <div className="score-grid">
+          <div>
+            <span>内容相关性</span>
+            <strong>{selectedInterviewRecord.content_relevance ?? 0}</strong>
+          </div>
+
+          <div>
+            <span>个人经历匹配度</span>
+            <strong>{selectedInterviewRecord.personal_match ?? 0}</strong>
+          </div>
+
+          <div>
+            <span>技术准确性</span>
+            <strong>{selectedInterviewRecord.technical_accuracy ?? 0}</strong>
+          </div>
+
+          <div>
+            <span>表达结构</span>
+            <strong>{selectedInterviewRecord.structure_score ?? 0}</strong>
+          </div>
+
+          <div>
+            <span>风险控制</span>
+            <strong>{selectedInterviewRecord.risk_control ?? 0}</strong>
+          </div>
+        </div>
+
+        <div className="detail-block">
+          <h3>岗位 JD</h3>
+          <div className="answer-content">
+            {selectedInterviewRecord.job_description}
+          </div>
+        </div>
+
+        <div className="detail-block">
+          <h3>面试问题</h3>
+          <div className="answer-content">{selectedInterviewRecord.question}</div>
+        </div>
+
+        <div className="detail-block">
+          <h3>你的回答</h3>
+          <div className="answer-content">{selectedInterviewRecord.user_answer}</div>
+        </div>
+
+        <div className="detail-block">
+          <h3>主要问题</h3>
+          <p>{selectedInterviewRecord.main_problems || "暂无"}</p>
+        </div>
+
+        <div className="detail-block">
+          <h3>改进建议</h3>
+          <p>{selectedInterviewRecord.suggestions || "暂无"}</p>
+        </div>
+
+        <div className="detail-block">
+          <h3>参考回答</h3>
+          <div className="answer-content">
+            {selectedInterviewRecord.reference_answer || "暂无"}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <section>
       <h1>历史记录</h1>
-      <p>查看自由问答生成的历史记录，包括用户问题、AI 回答和引用来源。</p>
+      <p>查看自由问答、岗位分析和模拟面试产生的历史记录。</p>
+
+      <div className="history-tabs">
+        {tabs.map((tab) => (
+          <button
+            key={tab.key}
+            type="button"
+            className={activeTab === tab.key ? "active-tab" : ""}
+            onClick={() => handleTabChange(tab.key)}
+            disabled={loading}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
 
       <div className="table-header">
-        <h2>问答历史</h2>
+        <h2>{tabs.find((tab) => tab.key === activeTab)?.label}</h2>
 
-        <button type="button" onClick={fetchHistory} disabled={loading}>
+        <button
+          type="button"
+          onClick={() => fetchRecords(activeTab)}
+          disabled={loading}
+        >
           {loading ? "处理中..." : "刷新列表"}
         </button>
       </div>
 
       {message && <p className="message-text">{message}</p>}
 
-      {records.length === 0 ? (
-        <p className="empty-text">暂无历史记录。</p>
-      ) : (
-        <table className="file-table">
-          <thead>
-            <tr>
-              <th>问题</th>
-              <th>类型</th>
-              <th>联网搜索</th>
-              <th>创建时间</th>
-              <th>操作</th>
-            </tr>
-          </thead>
+      {activeTab === "interview" ? renderInterviewTable() : renderHistoryTable()}
 
-          <tbody>
-            {records.map((record) => (
-              <tr key={record.record_id}>
-                <td>{record.user_input}</td>
-                <td>{record.mode}</td>
-                <td>{record.used_web_search ? "是" : "否"}</td>
-                <td>{record.created_at}</td>
-                <td>
-                  <div className="table-actions">
-                    <button
-                      type="button"
-                      onClick={() => handleViewDetail(record.record_id)}
-                      disabled={loading}
-                    >
-                      查看
-                    </button>
-
-                    <button
-                      type="button"
-                      className="danger-button"
-                      onClick={() => handleDelete(record.record_id)}
-                      disabled={loading}
-                    >
-                      删除
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-
-      {selectedRecord && (
-        <div className="history-detail-card">
-          <h2>历史详情</h2>
-
-          <div className="detail-block">
-            <h3>用户问题</h3>
-            <p>{selectedRecord.user_input}</p>
-          </div>
-
-          <div className="detail-block">
-            <h3>AI 回答</h3>
-            <div className="answer-content">{selectedRecord.ai_output}</div>
-          </div>
-
-          <div className="detail-block">
-            <h3>引用来源</h3>
-
-            {selectedRecord.sources?.length > 0 ? (
-              <table className="file-table">
-                <thead>
-                  <tr>
-                    <th>文件名</th>
-                    <th>类型</th>
-                    <th>Chunk</th>
-                    <th>距离</th>
-                  </tr>
-                </thead>
-
-                <tbody>
-                  {selectedRecord.sources.map((source, index) => (
-                    <tr
-                      key={`${source.file_id}-${source.chunk_index}-${index}`}
-                    >
-                      <td>{source.filename || "未知文件"}</td>
-                      <td>{source.file_type || "-"}</td>
-                      <td>{source.chunk_index ?? "-"}</td>
-                      <td>
-                        {source.distance === null ||
-                        source.distance === undefined
-                          ? "-"
-                          : Number(source.distance).toFixed(4)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            ) : (
-              <p className="empty-text">暂无引用来源。</p>
-            )}
-          </div>
-        </div>
-      )}
+      {renderSelectedHistoryDetail()}
+      {renderSelectedInterviewDetail()}
     </section>
   );
 }
