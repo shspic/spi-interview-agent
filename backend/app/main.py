@@ -10,6 +10,7 @@ from app.api.knowledge import router as knowledge_router
 from app.api.llm import router as llm_router
 from app.api.chat import router as chat_router
 from app.api.history import router as history_router
+from app.api.jobs import router as jobs_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -38,3 +39,4 @@ app.include_router(knowledge_router, prefix="/api", tags=["知识库"])
 app.include_router(llm_router, prefix="/api", tags=["大模型"])
 app.include_router(chat_router, prefix="/api", tags=["RAG 问答"])
 app.include_router(history_router, prefix="/api", tags=["历史记录"])
+app.include_router(jobs_router, prefix="/api", tags=["岗位分析"])
