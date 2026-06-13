@@ -179,3 +179,74 @@ h1 {
   background: #f9fafb;
   font-weight: 700;
 }
+
+.chat-input-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.chat-input-panel textarea {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  resize: vertical;
+  font-family: inherit;
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.chat-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.chat-actions button,
+.secondary-button {
+  padding: 8px 14px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.chat-actions button {
+  background: #2563eb;
+  color: white;
+}
+
+.chat-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.secondary-button {
+  background: #6b7280;
+  color: white;
+}
+
+.answer-card,
+.sources-panel,
+.source-summary {
+  margin-top: 24px;
+  padding: 18px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.answer-content {
+  white-space: pre-wrap;
+  line-height: 1.7;
+}
+
+.source-summary p {
+  margin: 6px 0;
+}
+
+.source-summary code {
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: #f3f4f6;
+}
