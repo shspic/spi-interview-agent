@@ -51,3 +51,23 @@ def chat_completion(
 
     except Exception as exc:
         raise LLMServiceError(f"DeepSeek 调用失败：{exc}") from exc
+    
+def chat_with_messages(messages: list[dict]) -> str:
+    client = get_deepseek_client()
+
+    try:
+        response = client.chat.completions.create(
+            model=settings.deepseek_model,
+            messages=messages,
+            temperature=0.3,
+        )
+
+        content = response.choices[0].message.content
+
+        if not content:
+            raise LLMServiceError("模型返回内容为空")
+
+        return content
+
+    except Exception as exc:
+        raise LLMServiceError(f"DeepSeek 调用失败：{exc}") from exc

@@ -8,6 +8,7 @@ from app.db.database import init_db
 from app.api.files import router as files_router
 from app.api.knowledge import router as knowledge_router
 from app.api.llm import router as llm_router
+from app.api.chat import router as chat_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -34,3 +35,4 @@ app.include_router(health_router, prefix="/api", tags=["health"])
 app.include_router(files_router, prefix="/api", tags=["files"])
 app.include_router(knowledge_router, prefix="/api", tags=["知识库"])
 app.include_router(llm_router, prefix="/api", tags=["大模型"])
+app.include_router(chat_router, prefix="/api", tags=["RAG 问答"])
