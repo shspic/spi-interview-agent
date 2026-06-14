@@ -12,6 +12,10 @@ const tabs = [
     label: "岗位分析",
   },
   {
+    key: "agent",
+    label: "LangGraph Agent",
+  },
+  {
     key: "interview",
     label: "模拟面试",
   },
@@ -369,10 +373,17 @@ function History() {
     }
 
     const isJobAnalysis = selectedHistoryRecord.mode === "job_analysis";
+    const isAgent = selectedHistoryRecord.mode === "agent";
 
     return (
       <div className="history-detail-card">
-        <h2>{isJobAnalysis ? "岗位分析详情" : "自由问答详情"}</h2>
+        <h2>
+  {isJobAnalysis
+    ? "岗位分析详情"
+    : isAgent
+    ? "LangGraph Agent 详情"
+    : "自由问答详情"}
+</h2>
 
         <div className="detail-block">
           <h3>{isJobAnalysis ? "岗位 JD" : "用户问题"}</h3>
@@ -380,7 +391,13 @@ function History() {
         </div>
 
         <div className="detail-block">
-          <h3>{isJobAnalysis ? "岗位分析结果" : "AI 回答"}</h3>
+          <h3>
+  {isJobAnalysis
+    ? "岗位分析结果"
+    : isAgent
+    ? "Agent 回答"
+    : "AI 回答"}
+</h3>
           <div className="answer-content">{selectedHistoryRecord.ai_output}</div>
         </div>
 
@@ -389,23 +406,29 @@ function History() {
           {renderSourcesTable(selectedHistoryRecord.sources)}
         </div>
 
-        {isJobAnalysis && (
-          <div className="detail-block">
-            <h3>联网搜索使用情况</h3>
-            <p>
-              {selectedHistoryRecord.used_web_search
-                ? "本次岗位分析使用了 Tavily 联网搜索。"
-                : "本次岗位分析未使用联网搜索。"}
-            </p>
-          </div>
-        )}
+        {(isJobAnalysis || isAgent) && (
+  <div className="detail-block">
+    <h3>联网搜索使用情况</h3>
+    <p>
+      {selectedHistoryRecord.used_web_search
+        ? isAgent
+          ? "本次 Agent 问答使用了 Tavily 联网搜索。"
+          : "本次岗位分析使用了 Tavily 联网搜索。"
+        : isAgent
+        ? "本次 Agent 问答未使用联网搜索。"
+        : "本次岗位分析未使用联网搜索。"}
+    </p>
+  </div>
+)}
 
-        {isJobAnalysis && selectedHistoryRecord.used_web_search && (
-          <div className="detail-block">
-            <h3>联网搜索来源</h3>
-            {renderWebSourcesTable(selectedHistoryRecord.web_sources)}
-          </div>
-        )}
+{(isJobAnalysis || isAgent) && selectedHistoryRecord.used_web_search && (
+  <div className="detail-block">
+    <h3>联网搜索来源</h3>
+    {renderWebSourcesTable(selectedHistoryRecord.web_sources)}
+  </div>
+)}
+          
+
       </div>
     );
   };
