@@ -1,60 +1,103 @@
 import { useEffect, useState } from "react";
 
 import apiClient from "./api/client";
-import Sidebar from "./components/Sidebar";
 import KnowledgeBase from "./pages/KnowledgeBase";
 import JobAnalysis from "./pages/JobAnalysis";
+import Agent from "./pages/Agent";
 import Chat from "./pages/Chat";
 import Interview from "./pages/Interview";
 import History from "./pages/History";
+
 import "./index.css";
 
+const pages = [
+  {
+    key: "knowledge",
+    label: "知识库管理",
+    component: <KnowledgeBase />,
+  },
+  {
+    key: "job",
+    label: "岗位分析",
+    component: <JobAnalysis />,
+  },
+  {
+    key: "agent",
+    label: "LangGraph Agent",
+    component: <Agent />,
+  },
+  {
+    key: "chat",
+    label: "自由问答",
+    component: <Chat />,
+  },
+  {
+    key: "interview",
+    label: "模拟面试",
+    component: <Interview />,
+  },
+  {
+    key: "history",
+    label: "历史记录",
+    component: <History />,
+  },
+];
+
 function App() {
-  const [currentPage, setCurrentPage] = useState("knowledge");
-  const [backendStatus, setBackendStatus] = useState("checking");
+  const [activePage, setActivePage] = useState("knowledge");
+  const [backendStatus, setBackendStatus] = useState("检查中");
+
+  const currentPage = pages.find((page) => page.key === activePage);
 
   useEffect(() => {
-    apiClient
-      .get("/api/health")
-      .then((response) => {
-        setBackendStatus(response.data.status);
-      })
-      .catch(() => {
-        setBackendStatus("error");
-      });
+    const checkBackendHealth = async () => {
+      try {
+        const response = await apiClient.get("/api/health");
+
+        if (response.data?.status === "ok") {
+          setBackendStatus("ok");
+        } else {
+          setBackendStatus("异常");
+        }
+      } catch (error) {
+        console.error("health check error:", error);
+        setBackendStatus("连接失败");
+      }
+    };
+
+    checkBackendHealth();
   }, []);
-
-  const renderPage = () => {
-    if (currentPage === "knowledge") return <KnowledgeBase />;
-    if (currentPage === "jobs") return <JobAnalysis />;
-    if (currentPage === "chat") return <Chat />;
-    if (currentPage === "interview") return <Interview />;
-    if (currentPage === "history") return <History />;
-
-    return <KnowledgeBase />;
-  };
 
   return (
     <div className="app-layout">
-      <Sidebar currentPage={currentPage} onChangePage={setCurrentPage} />
+      <aside className="sidebar">
+        <h1 className="sidebar-title">SPI面试Agent</h1>
+
+        <nav className="sidebar-nav">
+          {pages.map((page) => (
+            <button
+              key={page.key}
+              type="button"
+              className={
+                activePage === page.key ? "nav-button active" : "nav-button"
+              }
+              onClick={() => setActivePage(page.key)}
+            >
+              {page.label}
+            </button>
+          ))}
+        </nav>
+      </aside>
 
       <main className="main-content">
-        <div className="status-bar">
+        <div className="status-card">
           后端状态：
-          <span
-            className={
-              backendStatus === "ok"
-                ? "status-ok"
-                : backendStatus === "error"
-                ? "status-error"
-                : "status-checking"
-            }
-          >
+          <strong className={backendStatus === "ok" ? "status-ok" : "status-bad"}>
             {backendStatus}
-          </span>
+          </strong>
         </div>
 
-        {renderPage()}
+        <div className="content-card">{currentPage?.component}</div>
       </main>
     </div>
   );

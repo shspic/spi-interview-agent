@@ -469,3 +469,100 @@ h1 {
 .web-sources-panel a:hover {
   text-decoration: underline;
 }
+
+.agent-panel {
+  margin-top: 20px;
+  padding: 18px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.agent-panel label {
+  display: block;
+  margin-top: 14px;
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+.agent-panel label:first-child {
+  margin-top: 0;
+}
+
+.agent-panel textarea,
+.agent-panel select,
+.agent-panel input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  resize: vertical;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.agent-config-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  margin-top: 12px;
+}
+
+.sidebar {
+  width: 260px;
+  min-width: 260px;
+  padding: 28px 22px;
+  background: #111827;
+  color: #ffffff;
+  box-sizing: border-box;
+}
+
+.sidebar-title {
+  margin: 0 0 32px;
+  color: #ffffff;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sidebar-nav .nav-button {
+  display: block;
+  width: 100%;
+  padding: 12px 14px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #ffffff;
+  text-align: left;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.sidebar-nav .nav-button:hover {
+  background: #1f2937;
+}
+
+.sidebar-nav .nav-button.active {
+  background: #2563eb;
+  color: #ffffff;
+}
+
+.main-content {
+  flex: 1;
+  padding: 32px;
+  box-sizing: border-box;
+  overflow-x: hidden;
+}
+
+.app-layout {
+  display: flex;
+  min-height: 100vh;
+  background: #f3f4f6;
+}
