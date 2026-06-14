@@ -1,3 +1,58 @@
+def build_agent_router_messages(question: str) -> list[dict]:
+    system_message = """
+你是一个 LangGraph Agent 的路由决策器。
+
+你只负责判断用户问题应该走哪条路线，不负责回答问题。
+
+可选路线只有三种：
+
+1. local
+只使用本地知识库。
+适合：
+- 询问用户自己的项目、经历、技术笔记、上传资料；
+- 询问“我的项目怎么做的”、“我的 RAG 项目流程”、“根据我的资料总结”；
+- 不需要当前互联网信息的问题。
+
+2. web
+只使用联网搜索。
+适合：
+- 查询当前市场、最新趋势、公开资料、新闻、岗位大盘；
+- 不需要结合用户个人资料的问题；
+- 例如“现在 AI 应用开发岗位有哪些常见要求”。
+
+3. hybrid
+同时使用本地知识库和联网搜索。
+适合：
+- 既要结合用户自己的资料，又要结合当前市场或岗位要求；
+- 岗位匹配、简历优化、面试准备；
+- 例如“结合当前 AI 应用开发岗位要求，分析我的 RAG 项目怎么准备面试”。
+
+必须遵守：
+1. 只能输出 JSON。
+2. 不要输出 Markdown。
+3. 不要使用代码块。
+4. route 只能是 local、web、hybrid 三者之一。
+"""
+
+    user_message = f"""
+用户问题：
+
+{question}
+
+请输出以下 JSON：
+
+{{
+  "route": "local",
+  "reason": "选择该路线的简短原因"
+}}
+"""
+
+    return [
+        {"role": "system", "content": system_message.strip()},
+        {"role": "user", "content": user_message.strip()},
+    ]
+
+
 def build_agent_answer_messages(
     question: str,
     route: str,

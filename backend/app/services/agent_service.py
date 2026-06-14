@@ -7,7 +7,10 @@ from langgraph.graph import END, START, StateGraph
 from sqlalchemy.orm import Session
 
 from app.db.models import HistoryRecord
-from app.prompts.agent_prompt import build_agent_answer_messages
+from app.prompts.agent_prompt import (
+    build_agent_answer_messages,
+    build_agent_router_messages,
+)
 from app.services.llm_service import LLMServiceError, chat_with_messages
 from app.services.vector_store import search_similar_chunks
 from app.services.web_search_service import WebSearchServiceError, search_web
@@ -25,6 +28,7 @@ class AgentState(TypedDict, total=False):
     question: str
     mode: AgentMode
     route: AgentRoute
+    route_reason: str
     top_k: int
     max_web_results: int
 
@@ -130,19 +134,69 @@ def _build_web_context_and_sources(question: str, max_results: int) -> tuple[str
     return "\n\n".join(context_parts), web_sources
 
 
+def _extract_json_object(text: str) -> dict:
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+
+    start = text.find("{")
+    end = text.rfind("}")
+
+    if start == -1 or end == -1 or end <= start:
+        raise AgentServiceError("LLM Router 返回内容不是合法 JSON")
+
+    json_text = text[start : end + 1]
+
+    try:
+        return json.loads(json_text)
+    except json.JSONDecodeError as exc:
+        raise AgentServiceError(f"LLM Router JSON 解析失败：{exc}") from exc
+
+
+def _fallback_route(question: str) -> tuple[AgentRoute, str]:
+    should_use_web = any(keyword in question for keyword in WEB_INTENT_KEYWORDS)
+
+    if should_use_web:
+        return "hybrid", "LLM Router 失败，已根据关键词回退到 hybrid 路由"
+
+    return "local", "LLM Router 失败，已根据关键词回退到 local 路由"
+
+
+def _select_route_with_llm(question: str) -> tuple[AgentRoute, str]:
+    messages = build_agent_router_messages(question)
+
+    try:
+        raw_result = chat_with_messages(messages)
+        parsed = _extract_json_object(raw_result)
+    except (LLMServiceError, AgentServiceError):
+        return _fallback_route(question)
+
+    route = parsed.get("route", "local")
+    reason = parsed.get("reason", "")
+
+    if route not in ["local", "web", "hybrid"]:
+        return _fallback_route(question)
+
+    return route, reason or "LLM Router 已完成路由判断"
+
+
 def select_route_node(state: AgentState) -> dict:
     question = state.get("question", "")
     mode = state.get("mode", "auto")
 
     if mode in ["local", "web", "hybrid"]:
-        return {"route": mode}
+        return {
+            "route": mode,
+            "route_reason": f"用户手动选择 {mode} 模式",
+        }
 
-    should_use_web = any(keyword in question for keyword in WEB_INTENT_KEYWORDS)
+    route, reason = _select_route_with_llm(question)
 
-    if should_use_web:
-        return {"route": "hybrid"}
-
-    return {"route": "local"}
+    return {
+        "route": route,
+        "route_reason": reason,
+    }
 
 
 def retrieve_local_node(state: AgentState) -> dict:
@@ -292,6 +346,7 @@ def ask_agent(
         raise AgentServiceError(f"LangGraph Agent 执行失败：{exc}") from exc
 
     route = result.get("route", "local")
+    route_reason = result.get("route_reason", "")
     answer = result.get("answer", "")
     local_sources = result.get("local_sources", []) or []
     web_sources = result.get("web_sources", []) or []
@@ -313,6 +368,7 @@ def ask_agent(
     return {
         "answer": answer,
         "route": route,
+        "route_reason": route_reason,
         "sources": local_sources,
         "web_sources": web_sources,
         "used_local_knowledge": route in ["local", "hybrid"],
