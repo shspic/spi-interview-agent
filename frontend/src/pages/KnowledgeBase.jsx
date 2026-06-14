@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import apiClient from "../api/client";
+import { getFriendlyErrorMessage } from "../utils/errorMessage";
 
 function KnowledgeBase() {
   const [files, setFiles] = useState([]);
@@ -17,8 +18,7 @@ function KnowledgeBase() {
     } catch (error) {
       console.error("fetch files error:", error);
 
-      const detail = error.response?.data?.detail;
-      setMessage(detail || "获取文件列表失败，请检查后端是否启动。");
+      setMessage(getFriendlyErrorMessage(error, "获取文件列表失败。"));
     } finally {
       setLoading(false);
     }
@@ -36,8 +36,7 @@ function KnowledgeBase() {
     } catch (error) {
       console.error("fetch knowledge status error:", error);
 
-      const detail = error.response?.data?.detail;
-      setMessage(detail || "获取知识库状态失败，请检查后端是否启动。");
+      setMessage(getFriendlyErrorMessage(error, "获取知识库状态失败。"));
     } finally {
       setLoading(false);
     }
@@ -105,8 +104,7 @@ function KnowledgeBase() {
     } catch (error) {
       console.error("upload file error:", error);
 
-      const detail = error.response?.data?.detail;
-      setMessage(detail || "文件上传失败。");
+      setMessage(getFriendlyErrorMessage(error, "文件上传失败。"));
     } finally {
       setLoading(false);
     }
@@ -132,8 +130,7 @@ function KnowledgeBase() {
     } catch (error) {
       console.error("delete file error:", error);
 
-      const detail = error.response?.data?.detail;
-      setMessage(detail || "文件删除失败。");
+      setMessage(getFriendlyErrorMessage(error, "文件删除失败。"));
     } finally {
       setLoading(false);
     }
@@ -167,8 +164,7 @@ function KnowledgeBase() {
     } catch (error) {
       console.error("rebuild knowledge error:", error);
 
-      const detail = error.response?.data?.detail;
-      setMessage(detail || "知识库索引重建失败，请查看后端终端错误。");
+      setMessage(getFriendlyErrorMessage(error, "知识库索引重建失败。"));
     } finally {
       setLoading(false);
     }

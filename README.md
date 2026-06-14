@@ -1,134 +1,183 @@
-# AI Interview RAG Coach
+# SPI面试Agent
 
-基于 RAG 的 AI 实习面试训练与岗位匹配助手。
+SPI面试Agent 是一个面向 AI 应用开发实习求职场景的智能面试训练与岗位匹配系统。
 
-本项目面向 AI 应用开发、后端开发、大模型应用开发等实习求职场景，支持用户上传个人资料、项目说明、技术笔记等本地文档，并基于本地知识库完成自由问答、岗位 JD 分析、模拟面试训练和历史记录管理。
+项目基于 FastAPI、React、SQLite、ChromaDB、DeepSeek、Tavily 和 LangGraph 构建，支持本地知识库管理、RAG 问答、岗位 JD 分析、模拟面试评价、联网搜索增强和 Agent 自动路由。
+
+---
 
 ## 1. 项目定位
 
-很多求职者在准备 AI 应用开发实习时，会遇到几个问题：
+本项目主要解决 AI 应用开发实习准备中的三个问题：
 
-* 不知道自己的项目经历如何匹配岗位 JD；
-* 不知道面试官可能围绕项目问什么；
-* 不知道如何把自己的学习经历、项目经历表达成面试回答；
-* 直接问大模型时，大模型容易编造个人经历；
-* 项目资料、岗位要求、面试记录分散，难以沉淀。
+1. 如何基于个人项目资料和学习笔记，进行有依据的面试问答训练；
+2. 如何结合岗位 JD 分析自己与目标岗位的匹配度；
+3. 如何通过 Agent 自动判断问题是否需要本地知识库、联网搜索或混合检索。
 
-本项目通过本地知识库 + RAG 检索 + 大模型生成的方式，让 AI 回答尽量基于用户自己上传的资料，减少虚构内容，并辅助用户进行岗位分析和模拟面试训练。
+系统强调两点：
+
+* 用户个人经历、项目经历和能力判断必须基于本地知识库；
+* 当前岗位趋势、招聘要求和技术市场信息可以通过 Tavily 联网搜索补充。
+
+---
 
 ## 2. 核心功能
 
 ### 2.1 知识库管理
 
-支持上传本地资料文件，并构建向量知识库。
+支持上传：
 
-当前支持文件类型：
+* Markdown
+* TXT
+* PDF
 
-* `.txt`
-* `.md`
-* `.pdf`
+系统会解析文档内容，切分为文本片段，并通过 embedding 模型写入 ChromaDB 向量库。
 
-主要能力：
+知识库页面支持：
 
-* 上传文件；
-* 查看文件列表；
-* 删除文件；
-* 预览文本解析结果；
-* 预览文本切分结果；
-* 重建知识库索引；
-* 查看知识库状态；
-* 基于 query 检索相似文本片段。
+* 文件上传
+* 文件列表查看
+* 文件删除
+* 知识库状态查看
+* 知识库索引重建
+
+---
 
 ### 2.2 RAG 自由问答
 
-用户可以基于本地知识库进行自由提问。
+用户可以基于本地知识库提问。
 
-流程：
+系统流程：
 
 1. 用户输入问题；
-2. 后端调用 embedding 模型生成查询向量；
-3. 从 ChromaDB 中检索相关文本片段；
-4. 将检索结果和用户问题拼接进 Prompt；
-5. 调用 DeepSeek API 生成回答；
-6. 返回回答结果和引用来源；
-7. 保存问答历史。
+2. 后端从 ChromaDB 检索相关片段；
+3. 将相关片段与问题一起发送给 DeepSeek；
+4. 返回基于本地知识库的回答；
+5. 保存历史记录和引用来源。
+
+---
 
 ### 2.3 岗位 JD 分析
 
-用户可以粘贴实习岗位 JD，系统会结合本地知识库分析：
+用户可以粘贴岗位 JD，系统会结合本地知识库分析：
 
-* 岗位摘要；
-* 核心技能要求；
-* 用户已有匹配点；
-* 用户短板；
-* 简历优化建议；
-* 可能面试问题；
-* 优先准备清单；
-* 风险提示。
+* 岗位核心要求
+* 用户当前匹配点
+* 用户短板
+* 简历优化建议
+* 面试准备建议
 
-该模块强调：涉及用户经历、项目、技能时，必须基于本地知识库，不编造用户没有提供的信息。
+岗位分析支持可选 Tavily 联网搜索，用于补充当前岗位市场信息和技术趋势。
+
+---
 
 ### 2.4 模拟面试
 
-系统支持根据岗位 JD 和本地知识库生成模拟面试题，并评价用户回答。
-
-当前包含两个核心流程：
-
-1. 生成模拟面试题；
-2. 评价用户回答。
+系统支持根据用户资料和岗位方向生成模拟面试问题，并对用户回答进行评价。
 
 评价维度包括：
 
-* 总分；
-* 内容相关性；
-* 个人经历匹配度；
-* 技术准确性；
-* 表达结构；
-* 风险控制；
-* 主要问题；
-* 改进建议；
-* 参考回答。
+* 总分
+* 内容相关性
+* 个人经历匹配度
+* 技术准确性
+* 表达结构
+* 风险控制
+* 主要问题
+* 改进建议
+* 参考回答
 
-### 2.5 历史记录管理
+---
 
-前端历史记录页面支持查看和删除三类记录：
+### 2.5 LangGraph Agent
 
-* 自由问答记录；
-* 岗位分析记录；
-* 模拟面试记录。
+Agent 页面支持四种模式：
 
-用户可以查看历史详情，包括问题、回答、岗位分析结果、面试评分、建议和参考回答。
+* auto：由 LLM Router 自动判断路线；
+* local：只使用本地知识库；
+* web：只使用 Tavily 联网搜索；
+* hybrid：同时使用本地知识库和联网搜索。
+
+Agent 工作流：
+
+1. LLM Router 判断问题应该走 local / web / hybrid；
+2. local 路线检索 ChromaDB 本地知识库；
+3. web 路线调用 Tavily 联网搜索；
+4. hybrid 路线同时使用本地知识库和联网搜索；
+5. DeepSeek 生成最终回答；
+6. 保存路由原因、执行轨迹、引用来源和历史记录。
+
+---
+
+### 2.6 历史记录
+
+系统支持查看：
+
+* 自由问答历史
+* 岗位分析历史
+* LangGraph Agent 历史
+* 模拟面试历史
+
+Agent 历史记录会保存：
+
+* 用户问题
+* Agent 回答
+* 实际路由
+* 路由原因
+* 执行轨迹
+* 本地知识库引用来源
+* 联网搜索来源
+
+---
+
+### 2.7 系统状态自检
+
+系统状态页用于检查：
+
+* 后端服务状态
+* DeepSeek API Key 是否配置
+* Tavily API Key 是否配置
+* 数据库记录数量
+* 知识库文件数量
+* 向量片段数量
+* 索引状态
+
+---
 
 ## 3. 技术栈
 
 ### 后端
 
-* Python
 * FastAPI
 * Uvicorn
-* SQLAlchemy
 * SQLite
+* SQLAlchemy
 * ChromaDB
 * sentence-transformers
 * pypdf
-* OpenAI SDK 兼容调用 DeepSeek API
+* DeepSeek API
+* Tavily API
+* LangGraph
 
 ### 前端
 
 * React
 * Vite
 * Axios
+* JavaScript
 * CSS
 
-### AI / RAG
+### AI / RAG / Agent
 
-* DeepSeek Chat API
-* BAAI/bge-small-zh-v1.5 embedding model
-* ChromaDB 向量数据库
-* 文本解析
-* 文本切分
-* 向量检索
-* Prompt Engineering
+* RAG
+* Embedding
+* Vector Store
+* LLM Router
+* Tool Routing
+* LangGraph Workflow
+* Web Search Augmentation
+
+---
 
 ## 4. 项目结构
 
@@ -137,63 +186,33 @@ NO1_agent/
 ├── backend/
 │   ├── app/
 │   │   ├── api/
-│   │   │   ├── chat.py
-│   │   │   ├── files.py
-│   │   │   ├── health.py
-│   │   │   ├── history.py
-│   │   │   ├── interview.py
-│   │   │   ├── interview_records.py
-│   │   │   ├── jobs.py
-│   │   │   ├── knowledge.py
-│   │   │   └── llm.py
 │   │   ├── core/
-│   │   │   └── config.py
 │   │   ├── db/
-│   │   │   ├── database.py
-│   │   │   └── models.py
 │   │   ├── prompts/
-│   │   │   ├── chat_prompt.py
-│   │   │   ├── interview_prompt.py
-│   │   │   └── job_analysis_prompt.py
 │   │   ├── services/
-│   │   │   ├── chat_service.py
-│   │   │   ├── document_loader.py
-│   │   │   ├── interview_service.py
-│   │   │   ├── job_service.py
-│   │   │   ├── llm_service.py
-│   │   │   ├── text_splitter.py
-│   │   │   └── vector_store.py
 │   │   └── main.py
 │   ├── data/
-│   │   ├── uploads/
-│   │   ├── chroma_db/
-│   │   └── app.db
 │   ├── .env.example
 │   └── requirements.txt
 ├── frontend/
 │   ├── src/
 │   │   ├── api/
-│   │   │   └── client.js
 │   │   ├── pages/
-│   │   │   ├── Chat.jsx
-│   │   │   ├── History.jsx
-│   │   │   ├── Interview.jsx
-│   │   │   ├── JobAnalysis.jsx
-│   │   │   └── KnowledgeBase.jsx
+│   │   ├── utils/
 │   │   ├── App.jsx
-│   │   ├── index.css
-│   │   └── main.jsx
+│   │   └── index.css
 │   ├── package.json
 │   └── vite.config.js
 ├── docs/
-│   └── 需求文档.md
+├── README.md
 ├── .gitignore
 ├── AGENTS.md
-├── CLAUDE.md
-└── README.md
+└── CLAUDE.md
 ```
 
-## 5. 后端启动方式
+---
+
+## 5. 后端启动
 
 进入后端目录：
 
@@ -201,10 +220,9 @@ NO1_agent/
 cd D:\spir\NO1_agent\backend
 ```
 
-创建并激活虚拟环境：
+激活虚拟环境：
 
 ```powershell
-py -3.12 -m venv .venv
 .\.venv\Scripts\activate
 ```
 
@@ -220,19 +238,21 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
-后端默认地址：
+后端地址：
 
 ```text
 http://127.0.0.1:8000
 ```
 
-Swagger 接口文档：
+Swagger 文档：
 
 ```text
 http://127.0.0.1:8000/docs
 ```
 
-## 6. 前端启动方式
+---
+
+## 6. 前端启动
 
 进入前端目录：
 
@@ -252,17 +272,23 @@ npm install
 npm run dev
 ```
 
-前端默认地址：
+前端地址：
 
 ```text
 http://localhost:5173
 ```
 
-## 7. 环境变量配置
+---
 
-后端需要在 `backend/.env` 中配置真实 API Key。
+## 7. 环境变量
 
-示例：
+后端需要创建：
+
+```text
+backend/.env
+```
+
+参考：
 
 ```env
 DEEPSEEK_API_KEY=your_deepseek_api_key
@@ -271,144 +297,81 @@ DEEPSEEK_MODEL=deepseek-chat
 
 TAVILY_API_KEY=your_tavily_api_key
 
-CHROMA_PERSIST_DIR=./data/chroma_db
-UPLOAD_DIR=./data/uploads
-SQLITE_DB_PATH=./data/app.db
+CHROMA_PERSIST_DIR=data/chroma_db
+UPLOAD_DIR=data/uploads
+SQLITE_DB_PATH=data/app.db
 EMBEDDING_MODEL_NAME=BAAI/bge-small-zh-v1.5
 ```
 
 注意：
 
-* `.env` 只用于本地开发；
-* `.env` 不能提交到 Git；
-* `.env.example` 只保留变量名示例，不能写真实 key。
-
-## 8. 主要接口
-
-### 健康检查
-
 ```text
-GET /api/health
+backend/.env 不应提交到 Git。
 ```
 
-### 文件管理
+---
 
-```text
-POST   /api/files/upload
-GET    /api/files
-DELETE /api/files/{file_id}
-```
+## 8. 推荐演示流程
 
-### 知识库
+1. 启动后端；
+2. 启动前端；
+3. 打开系统状态页，确认后端、DeepSeek、Tavily、知识库状态正常；
+4. 上传个人项目资料或技术笔记；
+5. 重建知识库索引；
+6. 进入自由问答页面，测试本地 RAG 问答；
+7. 进入岗位分析页面，粘贴岗位 JD 并启用联网搜索；
+8. 进入模拟面试页面，生成问题并评价回答；
+9. 进入 LangGraph Agent 页面，测试 auto / local / web / hybrid；
+10. 进入历史记录页面，查看问答、岗位分析、Agent 执行轨迹和模拟面试记录。
 
-```text
-POST /api/knowledge/preview-text
-POST /api/knowledge/preview-chunks
-POST /api/knowledge/rebuild
-GET  /api/knowledge/status
-POST /api/knowledge/search
-```
+---
 
-### RAG 问答
+## 9. 项目亮点
 
-```text
-POST /api/chat/ask
-```
+### RAG 亮点
 
-### 岗位分析
+* 支持多格式文档上传与解析；
+* 使用 ChromaDB 管理本地向量库；
+* 回答时保留引用来源；
+* 明确限制模型不能编造用户经历。
 
-```text
-POST /api/jobs/analyze
-```
+### Agent 亮点
 
-### 模拟面试
+* 使用 LangGraph 构建 Agent 工作流；
+* 使用 LLM Router 自动判断 local / web / hybrid；
+* 支持 Tavily 联网搜索；
+* 保存路由原因和执行轨迹；
+* 可在历史记录中查看 Agent 的工具调用过程。
 
-```text
-POST /api/interview/question
-POST /api/interview/evaluate
-```
+### 工程亮点
 
-### 历史记录
+* 前后端分离；
+* FastAPI 提供结构化接口；
+* React 构建多页面交互；
+* SQLite 保存业务记录；
+* 系统状态页用于自检；
+* `.env` 与本地数据不进入 Git。
 
-```text
-GET    /api/history
-GET    /api/history/{record_id}
-DELETE /api/history/{record_id}
-```
-
-### 模拟面试记录
-
-```text
-GET    /api/interview-records
-GET    /api/interview-records/{session_id}
-DELETE /api/interview-records/{session_id}
-```
-
-## 9. 当前完成情况
-
-已完成：
-
-* FastAPI 后端服务；
-* React 前端页面；
-* SQLite 数据库存储；
-* 文件上传与文件管理；
-* 文档解析；
-* 文本切分；
-* ChromaDB 向量知识库；
-* 本地 embedding 模型接入；
-* DeepSeek API 接入；
-* RAG 自由问答；
-* 岗位 JD 分析；
-* 模拟面试生成与评价；
-* 自由问答历史记录；
-* 岗位分析历史记录；
-* 模拟面试历史记录；
-* 前后端基础联调。
+---
 
 ## 10. 当前限制
 
-当前项目仍存在以下限制：
+* 当前项目主要面向本地演示；
+* 尚未进行 Docker 化部署；
+* 知识库索引重建为手动触发；
+* Agent 路由质量依赖 LLM 输出；
+* 大模型回答质量依赖本地知识库质量和 Prompt 约束。
 
-* 暂未实现用户登录系统；
-* 暂未实现多用户隔离；
-* 暂未实现生产环境部署；
-* 暂未实现完整联网搜索；
-* 暂未引入 LangGraph 等 Agent 编排框架；
-* PDF 解析效果取决于原始 PDF 文本质量；
-* 大模型输出质量依赖 Prompt 和输入资料质量。
+---
 
-## 11. 后续计划
+## 11. 后续优化方向
 
-后续可继续增强：
+* 增加用户登录与多用户隔离；
+* 增加异步任务队列处理索引重建；
+* 增加 Docker Compose 一键启动；
+* 优化 Agent 工具调用过程可视化；
+* 增加更多面试题库和岗位样例；
+* 支持导出面试报告和岗位分析报告。
 
-* 接入 Tavily，实现岗位信息联网搜索；
-* 引入 LangGraph，实现 Agent 工作流；
-* 增加简历生成模块；
-* 增加面试会话连续追问能力；
-* 增加知识库文件分组；
-* 增加 Docker 部署；
-* 增加在线演示部署；
-* 优化 UI 体验；
-* 增加测试用例和异常处理。
-
-## 12. 项目价值
-
-本项目完整覆盖了一个 AI 应用开发项目的核心链路：
-
-```text
-前端页面
-后端 API
-数据库
-文件上传
-文档解析
-文本切分
-Embedding
-向量数据库
-RAG 检索
-大模型调用
-Prompt 设计
-历史记录管理
-前后端联调
 ```
-
-该项目可以作为 AI 应用开发、RAG 应用开发、后端开发实习方向的项目作品，用于展示对大模型应用工程化流程的理解和实践能力。
+```

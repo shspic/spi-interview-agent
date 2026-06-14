@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import apiClient from "../api/client";
+import { getFriendlyErrorMessage } from "../utils/errorMessage";
 
 const modeOptions = [
   {
@@ -89,17 +90,8 @@ function Agent() {
     } catch (error) {
       console.error("agent ask error:", error);
 
-      const status = error.response?.status;
-      const detail = error.response?.data?.detail;
-      const code = error.code;
-      const errorMessage = error.message;
-
-      setMessage(
-        detail ||
-          `Agent 请求失败。status=${status || "无"}，code=${
-            code || "无"
-          }，message=${errorMessage || "无"}`
-      );
+      setMessage(getFriendlyErrorMessage(error, "Agent 请求失败。"));
+      
     } finally {
       setLoading(false);
     }
