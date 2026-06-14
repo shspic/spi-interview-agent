@@ -1,4 +1,9 @@
-def build_job_analysis_messages(job_description: str, context: str) -> list[dict]:
+def build_job_analysis_messages(
+    job_description: str,
+    context: str,
+    web_context: str = "",
+    use_web_search: bool = False,
+) -> list[dict]:
     system_message = """
 你是一个严谨的 AI 实习岗位分析助手。
 
@@ -7,9 +12,22 @@ def build_job_analysis_messages(job_description: str, context: str) -> list[dict
 2. 涉及用户经历、项目、技能、学校、专业、学习背景时，只能依据本地知识库。
 3. 如果本地知识库没有依据，必须明确说明“当前知识库依据不足，不能确认”。
 4. 不要编造用户实习经历、项目成果、获奖情况、GitHub 数据。
-5. 可以基于岗位 JD 分析通用岗位要求，但不能把通用要求说成用户已经具备。
-6. 输出要适合用户后续修改简历和准备面试。
+5. 可以基于岗位 JD 和联网搜索结果分析通用岗位要求，但不能把通用市场要求说成用户已经具备。
+6. 联网搜索结果只能用于补充岗位市场信息、技术趋势、招聘关键词和常见要求。
+7. 输出要适合用户后续修改简历和准备面试。
 """
+
+    web_section = (
+        f"""
+【联网搜索结果】
+{web_context}
+"""
+        if use_web_search and web_context
+        else """
+【联网搜索结果】
+本次未启用联网搜索。
+"""
+    )
 
     user_message = f"""
 【岗位 JD】
@@ -17,6 +35,8 @@ def build_job_analysis_messages(job_description: str, context: str) -> list[dict
 
 【本地知识库上下文】
 {context}
+
+{web_section}
 
 请严格按照以下结构输出：
 
@@ -28,22 +48,26 @@ def build_job_analysis_messages(job_description: str, context: str) -> list[dict
 ## 2. 核心技能要求
 用列表提取 JD 中的关键技能要求。
 
-## 3. 用户已有匹配点
+## 3. 联网搜索补充信息
+如果启用了联网搜索，请总结联网结果中体现出的岗位市场要求、常见技术关键词和趋势。
+如果未启用联网搜索，请写“本次未启用联网搜索”。
+
+## 4. 用户已有匹配点
 只基于本地知识库说明用户已经具备哪些匹配点。没有依据的不要写成已具备。
 
-## 4. 用户短板
-说明用户相对岗位要求还缺什么。
+## 5. 用户短板
+说明用户相对岗位要求还缺什么。可以结合 JD 和联网搜索结果判断岗位要求，但不能编造用户经历。
 
-## 5. 简历优化建议
+## 6. 简历优化建议
 给出可以写进简历或项目描述里的优化方向，但不能编造。
 
-## 6. 可能面试问题
+## 7. 可能面试问题
 列出 8 到 12 个可能被问到的问题。
 
-## 7. 优先准备清单
+## 8. 优先准备清单
 按优先级列出用户接下来最应该准备的内容。
 
-## 8. 风险提示
+## 9. 风险提示
 指出哪些内容当前知识库依据不足，不能在简历或面试中夸大。
 """
 

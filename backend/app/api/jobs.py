@@ -10,12 +10,13 @@ router = APIRouter()
 
 class JobAnalyzeRequest(BaseModel):
     job_description: str
+    use_web_search: bool = False
 
 
 @router.post(
     "/jobs/analyze",
     summary="岗位 JD 分析",
-    description="结合岗位 JD 和本地知识库，分析用户匹配点、短板、简历优化建议和可能面试问题。",
+    description="结合岗位 JD、本地知识库和可选联网搜索，分析用户匹配点、短板、简历优化建议和可能面试问题。",
 )
 def analyze_job_api(
     request: JobAnalyzeRequest,
@@ -25,6 +26,7 @@ def analyze_job_api(
         return analyze_job(
             job_description=request.job_description,
             db=db,
+            use_web_search=request.use_web_search,
         )
     except JobServiceError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
