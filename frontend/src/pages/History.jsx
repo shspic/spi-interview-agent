@@ -413,6 +413,17 @@ function History() {
   </div>
 )}
 
+{isAgent && selectedHistoryRecord.execution_steps?.length > 0 && (
+  <div className="detail-block">
+    <h3>Agent 执行轨迹</h3>
+    <ol>
+      {selectedHistoryRecord.execution_steps.map((step, index) => (
+        <li key={`${step}-${index}`}>{step}</li>
+      ))}
+    </ol>
+  </div>
+)}
+
         {(isJobAnalysis || isAgent) && (
   <div className="detail-block">
     <h3>联网搜索使用情况</h3>

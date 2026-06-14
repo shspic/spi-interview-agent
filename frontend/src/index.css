@@ -566,3 +566,35 @@ h1 {
   min-height: 100vh;
   background: #f3f4f6;
 }
+
+.workflow-card,
+.status-box {
+  margin-top: 20px;
+  padding: 18px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.workflow-card ol {
+  padding-left: 22px;
+  line-height: 1.8;
+}
+
+.status-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.status-box h2 {
+  margin-top: 0;
+}
+
+.sample-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+}

@@ -39,6 +39,7 @@ class AgentState(TypedDict, total=False):
     web_sources: list[dict]
 
     answer: str
+    execution_steps: list[str]
 
 
 WEB_INTENT_KEYWORDS = [
@@ -57,6 +58,12 @@ WEB_INTENT_KEYWORDS = [
     "2025",
     "2026",
 ]
+
+
+def _append_step(state: AgentState, step: str) -> list[str]:
+    execution_steps = state.get("execution_steps", []) or []
+    next_index = len(execution_steps) + 1
+    return execution_steps + [f"{next_index}. {step}"]
 
 
 def _build_local_context_and_sources(chunks: list[dict]) -> tuple[str, list[dict]]:
@@ -186,16 +193,17 @@ def select_route_node(state: AgentState) -> dict:
     mode = state.get("mode", "auto")
 
     if mode in ["local", "web", "hybrid"]:
-        return {
-            "route": mode,
-            "route_reason": f"用户手动选择 {mode} 模式",
-        }
-
-    route, reason = _select_route_with_llm(question)
+        route = mode
+        reason = f"用户手动选择 {mode} 模式"
+    else:
+        route, reason = _select_route_with_llm(question)
 
     return {
         "route": route,
         "route_reason": reason,
+        "execution_steps": [
+            f"1. LLM Router 完成路由判断：route={route}，原因：{reason}"
+        ],
     }
 
 
@@ -214,6 +222,10 @@ def retrieve_local_node(state: AgentState) -> dict:
     return {
         "local_context": local_context,
         "local_sources": local_sources,
+        "execution_steps": _append_step(
+            state,
+            f"执行本地知识库检索：返回 {len(local_sources)} 个相关片段",
+        ),
     }
 
 
@@ -229,6 +241,10 @@ def web_search_node(state: AgentState) -> dict:
     return {
         "web_context": web_context,
         "web_sources": web_sources,
+        "execution_steps": _append_step(
+            state,
+            f"执行 Tavily 联网搜索：返回 {len(web_sources)} 条联网结果",
+        ),
     }
 
 
@@ -255,6 +271,10 @@ def generate_answer_node(state: AgentState) -> dict:
 
     return {
         "answer": answer,
+        "execution_steps": _append_step(
+            state,
+            "调用 DeepSeek 生成最终回答",
+        ),
     }
 
 
@@ -350,18 +370,20 @@ def ask_agent(
     answer = result.get("answer", "")
     local_sources = result.get("local_sources", []) or []
     web_sources = result.get("web_sources", []) or []
+    execution_steps = result.get("execution_steps", []) or []
 
     record = HistoryRecord(
-    record_id=str(uuid4()),
-    mode="agent",
-    user_input=cleaned_question,
-    ai_output=answer,
-    sources=json.dumps(local_sources, ensure_ascii=False),
-    used_web_search=1 if route in ["web", "hybrid"] else 0,
-    web_sources=json.dumps(web_sources, ensure_ascii=False),
-    route_reason=route_reason,
-    created_at=datetime.now().isoformat(timespec="seconds"),
-)
+        record_id=str(uuid4()),
+        mode="agent",
+        user_input=cleaned_question,
+        ai_output=answer,
+        sources=json.dumps(local_sources, ensure_ascii=False),
+        used_web_search=1 if route in ["web", "hybrid"] else 0,
+        web_sources=json.dumps(web_sources, ensure_ascii=False),
+        route_reason=route_reason,
+        execution_steps=json.dumps(execution_steps, ensure_ascii=False),
+        created_at=datetime.now().isoformat(timespec="seconds"),
+    )
 
     db.add(record)
     db.commit()
@@ -370,6 +392,7 @@ def ask_agent(
         "answer": answer,
         "route": route,
         "route_reason": route_reason,
+        "execution_steps": execution_steps,
         "sources": local_sources,
         "web_sources": web_sources,
         "used_local_knowledge": route in ["local", "hybrid"],

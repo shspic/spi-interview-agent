@@ -4,6 +4,7 @@ import apiClient from "../api/client";
 
 function KnowledgeBase() {
   const [files, setFiles] = useState([]);
+  const [knowledgeStatus, setKnowledgeStatus] = useState(null);
   const [selectedFile, setSelectedFile] = useState(null);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
@@ -14,14 +15,41 @@ function KnowledgeBase() {
       const response = await apiClient.get("/api/files");
       setFiles(response.data.files || []);
     } catch (error) {
-      setMessage("获取文件列表失败，请检查后端是否启动。");
+      console.error("fetch files error:", error);
+
+      const detail = error.response?.data?.detail;
+      setMessage(detail || "获取文件列表失败，请检查后端是否启动。");
     } finally {
       setLoading(false);
     }
   };
 
+  const fetchKnowledgeStatus = async () => {
+    try {
+      setLoading(true);
+      setMessage("正在刷新知识库状态...");
+
+      const response = await apiClient.get("/api/knowledge/status");
+
+      setKnowledgeStatus(response.data);
+      setMessage("知识库状态刷新成功。");
+    } catch (error) {
+      console.error("fetch knowledge status error:", error);
+
+      const detail = error.response?.data?.detail;
+      setMessage(detail || "获取知识库状态失败，请检查后端是否启动。");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const refreshAll = async () => {
+    await fetchFiles();
+    await fetchKnowledgeStatus();
+  };
+
   useEffect(() => {
-    fetchFiles();
+    refreshAll();
   }, []);
 
   const handleFileChange = (event) => {
@@ -65,7 +93,7 @@ function KnowledgeBase() {
       });
 
       setSelectedFile(null);
-      setMessage("文件上传成功。");
+      setMessage("文件上传成功。请点击“重建知识库索引”，让新文件进入 RAG 检索。");
 
       const fileInput = document.getElementById("file-input");
       if (fileInput) {
@@ -73,7 +101,10 @@ function KnowledgeBase() {
       }
 
       await fetchFiles();
+      await fetchKnowledgeStatus();
     } catch (error) {
+      console.error("upload file error:", error);
+
       const detail = error.response?.data?.detail;
       setMessage(detail || "文件上传失败。");
     } finally {
@@ -90,12 +121,54 @@ function KnowledgeBase() {
 
     try {
       setLoading(true);
+      setMessage("正在删除文件...");
+
       await apiClient.delete(`/api/files/${fileId}`);
-      setMessage("文件删除成功。");
+
+      setMessage("文件删除成功。建议重新构建知识库索引，避免向量库中残留旧文件内容。");
+
       await fetchFiles();
+      await fetchKnowledgeStatus();
     } catch (error) {
+      console.error("delete file error:", error);
+
       const detail = error.response?.data?.detail;
       setMessage(detail || "文件删除失败。");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRebuildKnowledge = async () => {
+    const confirmed = window.confirm(
+      "确认重建知识库索引吗？这会重新解析已上传文件，并刷新 ChromaDB 向量库。"
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setMessage("正在重建知识库索引，首次加载 embedding 模型可能较慢...");
+
+      const response = await apiClient.post("/api/knowledge/rebuild");
+
+      const totalChunks =
+        response.data.total_chunks ??
+        response.data.chunk_count ??
+        response.data.knowledge_base?.total_chunks ??
+        0;
+
+      setMessage(`知识库索引重建完成。当前向量片段数：${totalChunks}`);
+
+      await fetchFiles();
+      await fetchKnowledgeStatus();
+    } catch (error) {
+      console.error("rebuild knowledge error:", error);
+
+      const detail = error.response?.data?.detail;
+      setMessage(detail || "知识库索引重建失败，请查看后端终端错误。");
     } finally {
       setLoading(false);
     }
@@ -104,7 +177,10 @@ function KnowledgeBase() {
   return (
     <section>
       <h1>知识库管理</h1>
-      <p>上传 Markdown、TXT 或 PDF 文件，后续将用于构建本地 RAG 知识库。</p>
+      <p>
+        上传 Markdown、TXT 或 PDF 文件，并重建知识库索引。索引完成后，这些资料会用于
+        RAG 自由问答、岗位分析、模拟面试和 LangGraph Agent。
+      </p>
 
       <div className="upload-panel">
         <input
@@ -125,10 +201,56 @@ function KnowledgeBase() {
         </p>
       )}
 
+      <div className="chat-actions">
+        <button type="button" onClick={refreshAll} disabled={loading}>
+          刷新文件与状态
+        </button>
+
+        <button type="button" onClick={fetchKnowledgeStatus} disabled={loading}>
+          刷新知识库状态
+        </button>
+
+        <button type="button" onClick={handleRebuildKnowledge} disabled={loading}>
+          重建知识库索引
+        </button>
+      </div>
+
       {message && <p className="message-text">{message}</p>}
+
+      {knowledgeStatus && (
+        <div className="status-box">
+          <h2>知识库状态</h2>
+
+          <p>
+            文件总数：
+            <strong>{knowledgeStatus.total_files ?? "-"}</strong>
+          </p>
+
+          <p>
+            已索引文件：
+            <strong>{knowledgeStatus.indexed_files ?? "-"}</strong>
+          </p>
+
+          <p>
+            失败文件：
+            <strong>{knowledgeStatus.failed_files ?? "-"}</strong>
+          </p>
+
+          <p>
+            向量片段数：
+            <strong>{knowledgeStatus.total_chunks ?? "-"}</strong>
+          </p>
+
+          <p>
+            状态：
+            <strong>{knowledgeStatus.status ?? "-"}</strong>
+          </p>
+        </div>
+      )}
 
       <div className="table-header">
         <h2>已上传文件</h2>
+
         <button type="button" onClick={fetchFiles} disabled={loading}>
           刷新列表
         </button>

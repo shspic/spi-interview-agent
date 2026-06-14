@@ -55,3 +55,8 @@ def ensure_history_records_columns():
             connection.execute(
                 text("ALTER TABLE history_records ADD COLUMN route_reason TEXT DEFAULT ''")
             )
+
+        if "execution_steps" not in column_names:
+            connection.execute(
+                text("ALTER TABLE history_records ADD COLUMN execution_steps TEXT DEFAULT ''")
+            )

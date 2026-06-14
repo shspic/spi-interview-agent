@@ -34,6 +34,7 @@ function Agent() {
   const [answer, setAnswer] = useState("");
   const [route, setRoute] = useState("");
   const [routeReason, setRouteReason] = useState("");
+  const [executionSteps, setExecutionSteps] = useState([]);
   const [sources, setSources] = useState([]);
   const [webSources, setWebSources] = useState([]);
   const [usedLocalKnowledge, setUsedLocalKnowledge] = useState(false);
@@ -42,6 +43,18 @@ function Agent() {
 
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
+
+  const resetResult = () => {
+    setAnswer("");
+    setRoute("");
+    setRouteReason("");
+    setExecutionSteps([]);
+    setSources([]);
+    setWebSources([]);
+    setUsedLocalKnowledge(false);
+    setUsedWebSearch(false);
+    setHistoryRecordId("");
+  };
 
   const handleAskAgent = async () => {
     const trimmedQuestion = question.trim();
@@ -54,14 +67,7 @@ function Agent() {
     try {
       setLoading(true);
       setMessage("LangGraph Agent 正在处理问题...");
-      setAnswer("");
-      setRoute("");
-      setRouteReason("");
-      setSources([]);
-      setWebSources([]);
-      setUsedLocalKnowledge(false);
-      setUsedWebSearch(false);
-      setHistoryRecordId("");
+      resetResult();
 
       const response = await apiClient.post("/api/agent/ask", {
         question: trimmedQuestion,
@@ -73,6 +79,7 @@ function Agent() {
       setAnswer(response.data.answer || "");
       setRoute(response.data.route || "");
       setRouteReason(response.data.route_reason || "");
+      setExecutionSteps(response.data.execution_steps || []);
       setSources(response.data.sources || []);
       setWebSources(response.data.web_sources || []);
       setUsedLocalKnowledge(Boolean(response.data.used_local_knowledge));
@@ -103,14 +110,7 @@ function Agent() {
     setMode("auto");
     setTopK(5);
     setMaxWebResults(5);
-    setAnswer("");
-    setRoute("");
-    setRouteReason("");
-    setSources([]);
-    setWebSources([]);
-    setUsedLocalKnowledge(false);
-    setUsedWebSearch(false);
-    setHistoryRecordId("");
+    resetResult();
     setMessage("");
   };
 
@@ -122,6 +122,17 @@ function Agent() {
         基于 LangGraph 的智能问答入口。系统可以在本地知识库、Tavily
         联网搜索、混合检索之间进行路由，用于求职、岗位分析、面试准备和项目问答。
       </p>
+
+      <div className="workflow-card">
+        <h2>Agent 执行流程</h2>
+        <ol>
+          <li>LLM Router 判断问题应该走 local / web / hybrid。</li>
+          <li>local：检索 ChromaDB 本地知识库。</li>
+          <li>web：调用 Tavily 获取联网搜索结果。</li>
+          <li>hybrid：同时使用本地知识库和联网搜索。</li>
+          <li>最后调用 DeepSeek 生成结构化回答。</li>
+        </ol>
+      </div>
 
       <div className="agent-panel">
         <label htmlFor="agent-question">问题</label>
@@ -163,7 +174,9 @@ function Agent() {
               max="10"
               value={topK}
               onChange={(event) =>
-                setTopK(Math.min(10, Math.max(1, Number(event.target.value) || 1)))
+                setTopK(
+                  Math.min(10, Math.max(1, Number(event.target.value) || 1))
+                )
               }
               disabled={loading}
             />
@@ -185,6 +198,32 @@ function Agent() {
               disabled={loading}
             />
           </div>
+        </div>
+
+        <div className="sample-actions">
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() =>
+              setQuestion("根据我的本地知识库，介绍这个 RAG 项目的核心流程。")
+            }
+            disabled={loading}
+          >
+            填入本地知识库样例
+          </button>
+
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() =>
+              setQuestion(
+                "结合当前 AI 应用开发实习岗位要求，分析我的 RAG 项目怎么准备面试。"
+              )
+            }
+            disabled={loading}
+          >
+            填入混合检索样例
+          </button>
         </div>
 
         <div className="chat-actions">
@@ -239,6 +278,17 @@ function Agent() {
               历史记录 ID：<code>{historyRecordId}</code>
             </p>
           )}
+        </div>
+      )}
+
+      {executionSteps.length > 0 && (
+        <div className="workflow-card">
+          <h2>本次执行轨迹</h2>
+          <ol>
+            {executionSteps.map((step, index) => (
+              <li key={`${step}-${index}`}>{step}</li>
+            ))}
+          </ol>
         </div>
       )}
 

@@ -7,6 +7,7 @@ import Agent from "./pages/Agent";
 import Chat from "./pages/Chat";
 import Interview from "./pages/Interview";
 import History from "./pages/History";
+import SystemStatus from "./pages/SystemStatus";
 
 import "./index.css";
 
@@ -16,6 +17,11 @@ const pages = [
     label: "知识库管理",
     component: <KnowledgeBase />,
   },
+  {
+  key: "system",
+  label: "系统状态",
+  component: <SystemStatus />,
+},
   {
     key: "job",
     label: "岗位分析",

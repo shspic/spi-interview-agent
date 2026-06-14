@@ -29,6 +29,7 @@ def history_record_to_dict(record: HistoryRecord) -> dict:
         "used_web_search": bool(record.used_web_search),
         "web_sources": parse_json_field(record.web_sources),
         "route_reason": record.route_reason,
+        "execution_steps": parse_json_field(record.execution_steps),
         "created_at": record.created_at,
     }
 
