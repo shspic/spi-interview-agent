@@ -14,6 +14,7 @@ from app.api.jobs import router as jobs_router
 from app.api.interview import router as interview_router
 from app.api.interview_records import router as interview_records_router
 from app.api.web_search import router as web_search_router
+from app.api.agent import router as agent_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -46,3 +47,4 @@ app.include_router(jobs_router, prefix="/api", tags=["岗位分析"])
 app.include_router(interview_router, prefix="/api", tags=["模拟面试"])
 app.include_router(interview_records_router, prefix="/api", tags=["模拟面试记录"])
 app.include_router(web_search_router, prefix="/api", tags=["联网搜索"])
+app.include_router(agent_router, prefix="/api", tags=["LangGraph Agent"])
