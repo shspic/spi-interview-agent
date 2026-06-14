@@ -33,6 +33,7 @@ function Agent() {
 
   const [answer, setAnswer] = useState("");
   const [route, setRoute] = useState("");
+  const [routeReason, setRouteReason] = useState("");
   const [sources, setSources] = useState([]);
   const [webSources, setWebSources] = useState([]);
   const [usedLocalKnowledge, setUsedLocalKnowledge] = useState(false);
@@ -55,6 +56,7 @@ function Agent() {
       setMessage("LangGraph Agent 正在处理问题...");
       setAnswer("");
       setRoute("");
+      setRouteReason("");
       setSources([]);
       setWebSources([]);
       setUsedLocalKnowledge(false);
@@ -70,6 +72,7 @@ function Agent() {
 
       setAnswer(response.data.answer || "");
       setRoute(response.data.route || "");
+      setRouteReason(response.data.route_reason || "");
       setSources(response.data.sources || []);
       setWebSources(response.data.web_sources || []);
       setUsedLocalKnowledge(Boolean(response.data.used_local_knowledge));
@@ -102,6 +105,7 @@ function Agent() {
     setMaxWebResults(5);
     setAnswer("");
     setRoute("");
+    setRouteReason("");
     setSources([]);
     setWebSources([]);
     setUsedLocalKnowledge(false);
@@ -213,6 +217,11 @@ function Agent() {
           <p>
             实际路由：
             <strong>{route || "-"}</strong>
+          </p>
+
+          <p>
+            路由原因：
+            <strong>{routeReason || "暂无"}</strong>
           </p>
 
           <p>
