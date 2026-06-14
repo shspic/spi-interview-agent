@@ -434,3 +434,38 @@ h1 {
   border-radius: 8px;
   background: #f9fafb;
 }
+
+.web-search-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  font-weight: 500;
+}
+
+.web-search-option input {
+  width: auto;
+}
+
+.helper-text {
+  margin-top: 8px;
+  color: #6b7280;
+  font-size: 14px;
+}
+
+.web-sources-panel {
+  margin-top: 24px;
+  padding: 18px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.web-sources-panel a {
+  color: #2563eb;
+  text-decoration: none;
+}
+
+.web-sources-panel a:hover {
+  text-decoration: underline;
+}

@@ -4,8 +4,10 @@ import apiClient from "../api/client";
 
 function JobAnalysis() {
   const [jobDescription, setJobDescription] = useState("");
+  const [useWebSearch, setUseWebSearch] = useState(false);
   const [analysis, setAnalysis] = useState("");
   const [sources, setSources] = useState([]);
+  const [webSources, setWebSources] = useState([]);
   const [usedLocalKnowledge, setUsedLocalKnowledge] = useState(false);
   const [usedWebSearch, setUsedWebSearch] = useState(false);
   const [historyRecordId, setHistoryRecordId] = useState("");
@@ -22,19 +24,27 @@ function JobAnalysis() {
 
     try {
       setLoading(true);
-      setMessage("正在分析岗位，请稍等...");
+      setMessage(
+        useWebSearch
+          ? "正在结合本地知识库和联网搜索分析岗位，请稍等..."
+          : "正在基于本地知识库分析岗位，请稍等..."
+      );
+
       setAnalysis("");
       setSources([]);
+      setWebSources([]);
       setUsedLocalKnowledge(false);
       setUsedWebSearch(false);
       setHistoryRecordId("");
 
       const response = await apiClient.post("/api/jobs/analyze", {
         job_description: trimmedJobDescription,
+        use_web_search: useWebSearch,
       });
 
       setAnalysis(response.data.analysis || "");
       setSources(response.data.sources || []);
+      setWebSources(response.data.web_sources || []);
       setUsedLocalKnowledge(Boolean(response.data.used_local_knowledge));
       setUsedWebSearch(Boolean(response.data.used_web_search));
       setHistoryRecordId(response.data.history_record_id || "");
@@ -60,8 +70,10 @@ function JobAnalysis() {
 
   const handleClear = () => {
     setJobDescription("");
+    setUseWebSearch(false);
     setAnalysis("");
     setSources([]);
+    setWebSources([]);
     setUsedLocalKnowledge(false);
     setUsedWebSearch(false);
     setHistoryRecordId("");
@@ -71,6 +83,7 @@ function JobAnalysis() {
   return (
     <section>
       <h1>岗位分析</h1>
+
       <p>
         粘贴 AI 实习、后端开发、大模型应用开发等岗位 JD，系统会结合本地知识库分析岗位匹配点、短板、简历优化方向和可能面试问题。
       </p>
@@ -85,6 +98,20 @@ function JobAnalysis() {
           placeholder="请粘贴岗位职责、任职要求、加分项等完整 JD..."
           rows={12}
         />
+
+        <label className="web-search-option">
+          <input
+            type="checkbox"
+            checked={useWebSearch}
+            onChange={(event) => setUseWebSearch(event.target.checked)}
+            disabled={loading}
+          />
+          <span>启用 Tavily 联网搜索，补充当前岗位市场信息</span>
+        </label>
+
+        <p className="helper-text">
+          不勾选时只基于本地知识库分析；勾选后会额外调用 Tavily 搜索岗位相关信息。
+        </p>
 
         <div className="chat-actions">
           <button type="button" onClick={handleAnalyze} disabled={loading}>
@@ -133,7 +160,7 @@ function JobAnalysis() {
 
       {sources.length > 0 && (
         <div className="sources-panel">
-          <h2>引用来源</h2>
+          <h2>本地知识库引用来源</h2>
 
           <table className="file-table">
             <thead>
@@ -155,6 +182,52 @@ function JobAnalysis() {
                     {source.distance === null || source.distance === undefined
                       ? "-"
                       : Number(source.distance).toFixed(4)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {webSources.length > 0 && (
+        <div className="web-sources-panel">
+          <h2>联网搜索来源</h2>
+
+          <table className="file-table">
+            <thead>
+              <tr>
+                <th>标题</th>
+                <th>内容摘要</th>
+                <th>相关度</th>
+                <th>发布日期</th>
+                <th>链接</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {webSources.map((source, index) => (
+                <tr key={`${source.url}-${index}`}>
+                  <td>{source.title || "未知标题"}</td>
+                  <td className="long-cell">{source.content || "-"}</td>
+                  <td>
+                    {source.score === null || source.score === undefined
+                      ? "-"
+                      : Number(source.score).toFixed(4)}
+                  </td>
+                  <td>{source.published_date || "-"}</td>
+                  <td>
+                    {source.url ? (
+                      <a
+                        href={source.url}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        打开
+                      </a>
+                    ) : (
+                      "-"
+                    )}
                   </td>
                 </tr>
               ))}
