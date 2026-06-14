@@ -215,6 +215,50 @@ function History() {
     );
   };
 
+  const renderWebSourcesTable = (webSources) => {
+    if (!webSources || webSources.length === 0) {
+      return <p className="empty-text">暂无联网搜索来源。</p>;
+    }
+
+    return (
+      <table className="file-table">
+        <thead>
+          <tr>
+            <th>标题</th>
+            <th>内容摘要</th>
+            <th>相关度</th>
+            <th>发布日期</th>
+            <th>链接</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          {webSources.map((source, index) => (
+            <tr key={`${source.url}-${index}`}>
+              <td>{source.title || "未知标题"}</td>
+              <td className="long-cell">{source.content || "-"}</td>
+              <td>
+                {source.score === null || source.score === undefined
+                  ? "-"
+                  : Number(source.score).toFixed(4)}
+              </td>
+              <td>{source.published_date || "-"}</td>
+              <td>
+                {source.url ? (
+                  <a href={source.url} target="_blank" rel="noreferrer">
+                    打开
+                  </a>
+                ) : (
+                  "-"
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    );
+  };
+
   const renderHistoryTable = () => {
     if (historyRecords.length === 0) {
       return <p className="empty-text">暂无历史记录。</p>;
@@ -341,9 +385,27 @@ function History() {
         </div>
 
         <div className="detail-block">
-          <h3>引用来源</h3>
+          <h3>本地知识库引用来源</h3>
           {renderSourcesTable(selectedHistoryRecord.sources)}
         </div>
+
+        {isJobAnalysis && (
+          <div className="detail-block">
+            <h3>联网搜索使用情况</h3>
+            <p>
+              {selectedHistoryRecord.used_web_search
+                ? "本次岗位分析使用了 Tavily 联网搜索。"
+                : "本次岗位分析未使用联网搜索。"}
+            </p>
+          </div>
+        )}
+
+        {isJobAnalysis && selectedHistoryRecord.used_web_search && (
+          <div className="detail-block">
+            <h3>联网搜索来源</h3>
+            {renderWebSourcesTable(selectedHistoryRecord.web_sources)}
+          </div>
+        )}
       </div>
     );
   };
