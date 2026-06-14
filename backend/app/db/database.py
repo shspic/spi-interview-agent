@@ -4,6 +4,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 from app.core.config import settings
+from sqlalchemy import inspect, text
 
 db_path = Path(settings.sqlite_db_path)
 
@@ -33,6 +34,7 @@ def init_db():
     from app.db import models
 
     Base.metadata.create_all(bind=engine)
+    ensure_history_records_columns()
 
 
 def get_db():
@@ -41,3 +43,15 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+def ensure_history_records_columns():
+    inspector = inspect(engine)
+    columns = inspector.get_columns("history_records")
+    column_names = {column["name"] for column in columns}
+
+    with engine.begin() as connection:
+        if "route_reason" not in column_names:
+            connection.execute(
+                text("ALTER TABLE history_records ADD COLUMN route_reason TEXT DEFAULT ''")
+            )

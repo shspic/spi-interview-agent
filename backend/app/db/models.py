@@ -28,6 +28,7 @@ class HistoryRecord(Base):
     sources = Column(Text, nullable=True)
     used_web_search = Column(Integer, nullable=False, default=0)
     web_sources = Column(Text, nullable=True)
+    route_reason = Column(Text, default="")
     created_at = Column(Text, nullable=False)
 
 

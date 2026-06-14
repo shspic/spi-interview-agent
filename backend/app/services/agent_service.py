@@ -352,15 +352,16 @@ def ask_agent(
     web_sources = result.get("web_sources", []) or []
 
     record = HistoryRecord(
-        record_id=str(uuid4()),
-        mode="agent",
-        user_input=cleaned_question,
-        ai_output=answer,
-        sources=json.dumps(local_sources, ensure_ascii=False),
-        used_web_search=1 if route in ["web", "hybrid"] else 0,
-        web_sources=json.dumps(web_sources, ensure_ascii=False),
-        created_at=datetime.now().isoformat(timespec="seconds"),
-    )
+    record_id=str(uuid4()),
+    mode="agent",
+    user_input=cleaned_question,
+    ai_output=answer,
+    sources=json.dumps(local_sources, ensure_ascii=False),
+    used_web_search=1 if route in ["web", "hybrid"] else 0,
+    web_sources=json.dumps(web_sources, ensure_ascii=False),
+    route_reason=route_reason,
+    created_at=datetime.now().isoformat(timespec="seconds"),
+)
 
     db.add(record)
     db.commit()

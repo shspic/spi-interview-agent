@@ -406,6 +406,13 @@ function History() {
           {renderSourcesTable(selectedHistoryRecord.sources)}
         </div>
 
+        {isAgent && (
+  <div className="detail-block">
+    <h3>Agent 路由原因</h3>
+    <p>{selectedHistoryRecord.route_reason || "暂无路由原因。"}</p>
+  </div>
+)}
+
         {(isJobAnalysis || isAgent) && (
   <div className="detail-block">
     <h3>联网搜索使用情况</h3>
