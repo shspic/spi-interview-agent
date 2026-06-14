@@ -25,5 +25,7 @@ class Settings(BaseModel):
     )
     deepseek_model: str = os.getenv("DEEPSEEK_MODEL", "deepseek-v4-flash")
 
+    tavily_api_key: str = os.getenv("TAVILY_API_KEY", "")
+
 
 settings = Settings()
