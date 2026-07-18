@@ -19,6 +19,8 @@ from app.api.system_status import router as system_status_router
 from app.api.auth import router as auth_router
 from app.api.profile import router as profile_router
 from app.api.target_jobs import router as target_jobs_router
+from app.api.interview_sessions import router as interview_sessions_router
+from app.api.improvement_tasks import router as improvement_tasks_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -56,3 +58,5 @@ app.include_router(system_status_router, prefix="/api", tags=["系统状态"])
 app.include_router(auth_router, prefix="/api", tags=["认证"])
 app.include_router(profile_router, prefix="/api", tags=["用户资料"])
 app.include_router(target_jobs_router, prefix="/api", tags=["目标岗位"])
+app.include_router(interview_sessions_router, prefix="/api", tags=["面试训练会话"])
+app.include_router(improvement_tasks_router, prefix="/api", tags=["面试改进任务"])

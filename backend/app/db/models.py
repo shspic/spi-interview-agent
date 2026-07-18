@@ -1,4 +1,15 @@
-from sqlalchemy import Boolean, Column, ForeignKey, Index, Integer, Text, text
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    CheckConstraint,
+    Column,
+    ForeignKey,
+    Index,
+    Integer,
+    Text,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.orm import relationship
 
 from app.db.database import Base
@@ -144,3 +155,250 @@ class InterviewRecord(Base):
     suggestions = Column(Text, nullable=True)
     reference_answer = Column(Text, nullable=True)
     created_at = Column(Text, nullable=False)
+
+
+class InterviewSession(Base):
+    __tablename__ = "interview_sessions"
+    __table_args__ = (
+        CheckConstraint(
+            "mode IN ('quick', 'standard', 'deep_dive')",
+            name="ck_interview_sessions_mode",
+        ),
+        CheckConstraint(
+            "status IN ('draft', 'in_progress', 'completed', 'cancelled')",
+            name="ck_interview_sessions_status",
+        ),
+        CheckConstraint(
+            "planned_main_questions > 0",
+            name="ck_interview_sessions_planned_questions",
+        ),
+        CheckConstraint(
+            "current_main_question >= 0",
+            name="ck_interview_sessions_current_question",
+        ),
+        CheckConstraint(
+            "overall_score IS NULL OR (overall_score >= 0 AND overall_score <= 100)",
+            name="ck_interview_sessions_overall_score",
+        ),
+        Index("ix_interview_sessions_user_status", "user_id", "status"),
+        Index("ix_interview_sessions_user_mode", "user_id", "mode"),
+        Index("ix_interview_sessions_user_created", "user_id", "created_at"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    target_job_id = Column(
+        Integer,
+        ForeignKey("target_jobs.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    previous_session_id = Column(
+        Integer,
+        ForeignKey("interview_sessions.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    title = Column(Text, nullable=False)
+    mode = Column(Text, nullable=False, index=True)
+    status = Column(Text, nullable=False, default="draft", index=True)
+    planned_main_questions = Column(Integer, nullable=False)
+    current_main_question = Column(Integer, nullable=False, default=0)
+    selected_project_file_ids = Column(JSON, nullable=False, default=list)
+    overall_score = Column(Integer, nullable=True)
+    dimension_scores = Column(JSON, nullable=True)
+    summary = Column(Text, nullable=True)
+    started_at = Column(Text, nullable=True)
+    completed_at = Column(Text, nullable=True)
+    created_at = Column(Text, nullable=False, index=True)
+    updated_at = Column(Text, nullable=False)
+
+    previous_session = relationship(
+        "InterviewSession",
+        remote_side=[id],
+        foreign_keys=[previous_session_id],
+    )
+    turns = relationship(
+        "InterviewTurn",
+        back_populates="session",
+        cascade="all, delete-orphan",
+        order_by="InterviewTurn.sequence_number",
+    )
+    improvement_tasks = relationship(
+        "ImprovementTask",
+        back_populates="session",
+        cascade="all, delete-orphan",
+        order_by="ImprovementTask.id",
+    )
+
+
+class InterviewTurn(Base):
+    __tablename__ = "interview_turns"
+    __table_args__ = (
+        UniqueConstraint(
+            "session_id",
+            "sequence_number",
+            name="uq_interview_turns_session_sequence",
+        ),
+        UniqueConstraint(
+            "session_id",
+            "main_question_number",
+            "follow_up_number",
+            name="uq_interview_turns_question_follow_up",
+        ),
+        CheckConstraint(
+            "main_question_number > 0",
+            name="ck_interview_turns_main_question",
+        ),
+        CheckConstraint(
+            "follow_up_number >= 0 AND follow_up_number <= 2",
+            name="ck_interview_turns_follow_up_number",
+        ),
+        CheckConstraint(
+            "question_type IN ('main', 'follow_up')",
+            name="ck_interview_turns_question_type",
+        ),
+        CheckConstraint(
+            "technical_accuracy_score IS NULL OR "
+            "(technical_accuracy_score >= 0 AND technical_accuracy_score <= 100)",
+            name="ck_interview_turns_technical_accuracy_score",
+        ),
+        CheckConstraint(
+            "evidence_consistency_score IS NULL OR "
+            "(evidence_consistency_score >= 0 AND evidence_consistency_score <= 100)",
+            name="ck_interview_turns_evidence_consistency_score",
+        ),
+        CheckConstraint(
+            "answer_depth_score IS NULL OR "
+            "(answer_depth_score >= 0 AND answer_depth_score <= 100)",
+            name="ck_interview_turns_answer_depth_score",
+        ),
+        CheckConstraint(
+            "expression_structure_score IS NULL OR "
+            "(expression_structure_score >= 0 AND expression_structure_score <= 100)",
+            name="ck_interview_turns_expression_structure_score",
+        ),
+        CheckConstraint(
+            "job_match_score IS NULL OR "
+            "(job_match_score >= 0 AND job_match_score <= 100)",
+            name="ck_interview_turns_job_match_score",
+        ),
+        CheckConstraint(
+            "total_score IS NULL OR (total_score >= 0 AND total_score <= 100)",
+            name="ck_interview_turns_total_score",
+        ),
+        Index("ix_interview_turns_session_main", "session_id", "main_question_number"),
+        Index("ix_interview_turns_user_created", "user_id", "created_at"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    session_id = Column(
+        Integer,
+        ForeignKey("interview_sessions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    sequence_number = Column(Integer, nullable=False)
+    main_question_number = Column(Integer, nullable=False)
+    follow_up_number = Column(Integer, nullable=False, default=0)
+    parent_turn_id = Column(
+        Integer,
+        ForeignKey("interview_turns.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    question = Column(Text, nullable=False)
+    question_type = Column(Text, nullable=False)
+    user_answer = Column(Text, nullable=True)
+    technical_accuracy_score = Column(Integer, nullable=True)
+    evidence_consistency_score = Column(Integer, nullable=True)
+    answer_depth_score = Column(Integer, nullable=True)
+    expression_structure_score = Column(Integer, nullable=True)
+    job_match_score = Column(Integer, nullable=True)
+    total_score = Column(Integer, nullable=True)
+    evaluation_summary = Column(Text, nullable=True)
+    problems = Column(JSON, nullable=True)
+    optimized_answer = Column(Text, nullable=True)
+    modification_reason = Column(Text, nullable=True)
+    has_evidence_conflict = Column(Boolean, nullable=False, default=False)
+    evidence_conflicts = Column(JSON, nullable=True)
+    evidence_sources = Column(JSON, nullable=True)
+    answered_at = Column(Text, nullable=True)
+    created_at = Column(Text, nullable=False)
+    updated_at = Column(Text, nullable=False)
+
+    session = relationship("InterviewSession", back_populates="turns")
+    parent_turn = relationship(
+        "InterviewTurn",
+        remote_side=[id],
+        foreign_keys=[parent_turn_id],
+    )
+    improvement_tasks = relationship(
+        "ImprovementTask",
+        back_populates="turn",
+    )
+
+
+class ImprovementTask(Base):
+    __tablename__ = "improvement_tasks"
+    __table_args__ = (
+        CheckConstraint(
+            "category IN ('technical', 'project_evidence', 'answer_depth', "
+            "'expression', 'job_match', 'resume')",
+            name="ck_improvement_tasks_category",
+        ),
+        CheckConstraint(
+            "priority IN ('low', 'medium', 'high')",
+            name="ck_improvement_tasks_priority",
+        ),
+        CheckConstraint(
+            "status IN ('pending', 'completed')",
+            name="ck_improvement_tasks_status",
+        ),
+        Index("ix_improvement_tasks_user_status", "user_id", "status"),
+        Index("ix_improvement_tasks_user_category", "user_id", "category"),
+        Index("ix_improvement_tasks_session_status", "session_id", "status"),
+        Index("ix_improvement_tasks_user_created", "user_id", "created_at"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    session_id = Column(
+        Integer,
+        ForeignKey("interview_sessions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    turn_id = Column(
+        Integer,
+        ForeignKey("interview_turns.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    title = Column(Text, nullable=False)
+    description = Column(Text, nullable=False)
+    category = Column(Text, nullable=False, index=True)
+    priority = Column(Text, nullable=False)
+    status = Column(Text, nullable=False, default="pending", index=True)
+    created_at = Column(Text, nullable=False, index=True)
+    completed_at = Column(Text, nullable=True)
+    updated_at = Column(Text, nullable=False)
+
+    session = relationship("InterviewSession", back_populates="improvement_tasks")
+    turn = relationship("InterviewTurn", back_populates="improvement_tasks")

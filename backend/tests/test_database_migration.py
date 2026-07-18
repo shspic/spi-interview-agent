@@ -1,6 +1,14 @@
 from sqlalchemy import create_engine, inspect, text
 
 from app.db import database
+from app.db.models import (
+    FileRecord,
+    HistoryRecord,
+    InterviewRecord,
+    TargetJob,
+    User,
+    UserProfile,
+)
 
 
 def test_legacy_rows_are_preserved_with_null_user_id(tmp_path, monkeypatch):
@@ -58,3 +66,57 @@ def test_legacy_rows_are_preserved_with_null_user_id(tmp_path, monkeypatch):
         ).one()
 
     assert legacy_file.category == "other"
+
+
+def test_training_tables_are_added_without_changing_existing_user(
+    tmp_path,
+    monkeypatch,
+):
+    legacy_engine = create_engine(f"sqlite:///{(tmp_path / 'current.db').as_posix()}")
+    existing_tables = [
+        User.__table__,
+        UserProfile.__table__,
+        TargetJob.__table__,
+        FileRecord.__table__,
+        HistoryRecord.__table__,
+        InterviewRecord.__table__,
+    ]
+    database.Base.metadata.create_all(bind=legacy_engine, tables=existing_tables)
+    with legacy_engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO users "
+                "(id, username, password_hash, is_active, is_admin, created_at) "
+                "VALUES (1, 'existing-user', 'existing-hash', 1, 0, "
+                "'2026-07-18T00:00:00')"
+            )
+        )
+
+    monkeypatch.setattr(database, "engine", legacy_engine)
+    database.init_db()
+
+    inspector = inspect(legacy_engine)
+    assert {
+        "interview_sessions",
+        "interview_turns",
+        "improvement_tasks",
+    }.issubset(set(inspector.get_table_names()))
+    session_indexes = {
+        index["name"] for index in inspector.get_indexes("interview_sessions")
+    }
+    task_indexes = {
+        index["name"] for index in inspector.get_indexes("improvement_tasks")
+    }
+    assert "ix_interview_sessions_user_status" in session_indexes
+    assert "ix_improvement_tasks_user_status" in task_indexes
+
+    with legacy_engine.connect() as connection:
+        existing_user = connection.execute(
+            text(
+                "SELECT username, password_hash FROM users "
+                "WHERE id = 1"
+            )
+        ).one()
+
+    assert existing_user.username == "existing-user"
+    assert existing_user.password_hash == "existing-hash"
