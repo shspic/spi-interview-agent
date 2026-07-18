@@ -2,6 +2,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.agents.schemas import InterviewPlanOutput, SupervisorDecisionOutput
+
 InterviewMode = Literal["quick", "standard", "deep_dive"]
 InterviewStatus = Literal["draft", "in_progress", "completed", "cancelled"]
 ImprovementCategory = Literal[
@@ -84,6 +86,21 @@ class ImprovementTaskUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     status: ImprovementStatus
+
+
+class InterviewAnswerRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    turn_id: int = Field(gt=0)
+    answer: str = Field(min_length=1, max_length=20000)
+
+    @field_validator("answer")
+    @classmethod
+    def normalize_answer(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("回答不能为空")
+        return normalized
 
 
 class TargetJobSummary(BaseModel):
@@ -173,6 +190,32 @@ class InterviewSessionResponse(BaseModel):
 class InterviewSessionDetail(InterviewSessionResponse):
     turns: list[InterviewTurnResponse]
     improvement_tasks: list[ImprovementTaskResponse]
+    interview_plan: InterviewPlanOutput | None
+    current_question: InterviewTurnResponse | None
+    completed_main_questions: int
+    current_follow_up_count: int
+    is_completed: bool
+    agent_execution_summary: dict[str, Any] | None
+
+
+class InterviewStartResponse(InterviewSessionResponse):
+    interview_plan: InterviewPlanOutput
+    current_question: InterviewTurnResponse
+    completed_main_questions: int
+    current_follow_up_count: int
+    is_completed: bool
+    evidence_limited: bool
+    agent_execution_summary: dict[str, Any]
+
+
+class InterviewAnswerResponse(InterviewSessionResponse):
+    decision: SupervisorDecisionOutput
+    current_question: InterviewTurnResponse | None
+    completed_main_questions: int
+    current_follow_up_count: int
+    is_completed: bool
+    evidence_limited: bool
+    agent_execution_summary: dict[str, Any]
 
 
 class InterviewSessionListResponse(BaseModel):

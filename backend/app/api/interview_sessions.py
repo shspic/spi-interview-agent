@@ -12,11 +12,14 @@ from app.db.models import (
     User,
 )
 from app.schemas.interview_training import (
+    InterviewAnswerRequest,
+    InterviewAnswerResponse,
     InterviewMode,
     InterviewSessionCreate,
     InterviewSessionDetail,
     InterviewSessionListResponse,
     InterviewSessionResponse,
+    InterviewStartResponse,
     InterviewSessionUpdate,
     InterviewStatus,
     ImprovementTaskResponse,
@@ -25,6 +28,11 @@ from app.schemas.interview_training import (
     ProjectFileSummary,
     TargetJobSummary,
 )
+from app.services.interview_flow_service import (
+    InterviewFlowError,
+    answer_interview_turn,
+    start_interview_flow,
+)
 from app.services.interview_session_service import (
     InterviewTrainingServiceError,
     cancel_interview_session,
@@ -32,7 +40,6 @@ from app.services.interview_session_service import (
     delete_interview_session,
     get_owned_session,
     list_interview_sessions,
-    start_interview_session,
     update_interview_session,
 )
 
@@ -200,11 +207,64 @@ def session_to_detail(
         .order_by(ImprovementTask.id.asc())
         .all()
     )
+    progress = calculate_progress(interview_session, turns)
     return InterviewSessionDetail(
         **base.model_dump(),
         turns=[turn_to_response(turn) for turn in turns],
         improvement_tasks=[task_to_response(task) for task in tasks],
+        interview_plan=interview_session.interview_plan,
+        current_question=(
+            turn_to_response(progress["current_question"])
+            if progress["current_question"] is not None
+            else None
+        ),
+        completed_main_questions=progress["completed_main_questions"],
+        current_follow_up_count=progress["current_follow_up_count"],
+        is_completed=interview_session.status == "completed",
+        agent_execution_summary=interview_session.agent_execution_summary,
     )
+
+
+def calculate_progress(
+    interview_session: InterviewSession,
+    turns: list[InterviewTurn],
+) -> dict:
+    current_question = next(
+        (turn for turn in reversed(turns) if turn.user_answer is None),
+        None,
+    )
+    active_main_question = (
+        current_question.main_question_number
+        if current_question is not None
+        else interview_session.current_main_question
+    )
+    current_follow_up_count = sum(
+        1
+        for turn in turns
+        if turn.main_question_number == active_main_question
+        and turn.follow_up_number > 0
+    )
+    main_question_numbers = sorted(
+        {turn.main_question_number for turn in turns if turn.follow_up_number == 0}
+    )
+    max_main_question = max(main_question_numbers, default=0)
+    completed_main_questions = 0
+    for main_question_number in main_question_numbers:
+        question_group = [
+            turn
+            for turn in turns
+            if turn.main_question_number == main_question_number
+        ]
+        if all(turn.user_answer is not None for turn in question_group) and (
+            interview_session.status == "completed"
+            or main_question_number < max_main_question
+        ):
+            completed_main_questions += 1
+    return {
+        "current_question": current_question,
+        "completed_main_questions": completed_main_questions,
+        "current_follow_up_count": current_follow_up_count,
+    }
 
 
 @router.post(
@@ -309,7 +369,7 @@ def delete_session(
 
 @router.post(
     "/interview-sessions/{session_id}/start",
-    response_model=InterviewSessionResponse,
+    response_model=InterviewStartResponse,
 )
 def start_session(
     session_id: int,
@@ -317,14 +377,77 @@ def start_session(
     current_user: User = Depends(get_current_user),
 ):
     try:
-        interview_session = start_interview_session(
+        result = start_interview_flow(
             db,
             current_user.id,
             session_id,
         )
-    except InterviewTrainingServiceError as error:
-        raise_http_error(error)
-    return session_to_response(db, current_user.id, interview_session)
+    except (InterviewFlowError, InterviewTrainingServiceError) as error:
+        raise HTTPException(
+            status_code=error.status_code,
+            detail=error.detail,
+        ) from error
+    base = session_to_response(db, current_user.id, result.interview_session)
+    return InterviewStartResponse(
+        **base.model_dump(),
+        interview_plan=result.plan,
+        current_question=turn_to_response(result.first_turn),
+        completed_main_questions=0,
+        current_follow_up_count=0,
+        is_completed=False,
+        evidence_limited=result.evidence_limited,
+        agent_execution_summary=result.agent_execution_summary,
+    )
+
+
+@router.post(
+    "/interview-sessions/{session_id}/answer",
+    response_model=InterviewAnswerResponse,
+)
+def answer_session_question(
+    session_id: int,
+    request: InterviewAnswerRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    try:
+        result = answer_interview_turn(
+            db,
+            current_user.id,
+            session_id,
+            request.turn_id,
+            request.answer,
+        )
+    except (InterviewFlowError, InterviewTrainingServiceError) as error:
+        raise HTTPException(
+            status_code=error.status_code,
+            detail=error.detail,
+        ) from error
+    turns = (
+        db.query(InterviewTurn)
+        .filter(
+            InterviewTurn.session_id == session_id,
+            InterviewTurn.user_id == current_user.id,
+        )
+        .order_by(InterviewTurn.sequence_number.asc())
+        .all()
+    )
+    progress = calculate_progress(result.interview_session, turns)
+    base = session_to_response(db, current_user.id, result.interview_session)
+    return InterviewAnswerResponse(
+        **base.model_dump(),
+        decision=result.decision,
+        current_question=(
+            turn_to_response(progress["current_question"])
+            if progress["current_question"] is not None
+            else None
+        ),
+        completed_main_questions=progress["completed_main_questions"],
+        current_follow_up_count=progress["current_follow_up_count"],
+        is_completed=result.interview_session.status == "completed",
+        evidence_limited=result.evidence_limited,
+        agent_execution_summary=result.agent_execution_summary,
+    )
 
 
 @router.post(

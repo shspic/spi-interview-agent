@@ -3,12 +3,14 @@ from datetime import datetime
 import pytest
 from sqlalchemy.exc import IntegrityError
 
+from app.agents import structured_llm
 from app.db.models import (
     FileRecord,
     ImprovementTask,
     InterviewSession,
     InterviewTurn,
 )
+from app.services import evidence_retrieval_service
 from app.services.improvement_task_service import create_improvement_task
 from app.services.interview_session_service import (
     InterviewTrainingServiceError,
@@ -16,6 +18,32 @@ from app.services.interview_session_service import (
 )
 
 PASSWORD = "strong-password-123"
+
+
+@pytest.fixture()
+def mock_interview_agents(monkeypatch):
+    def fake_llm(messages):
+        system_message = messages[0]["content"]
+        if "Supervisor Agent" in system_message:
+            return (
+                '{"planned_main_questions":3,'
+                '"focus_areas":["project"],'
+                '"strategy":"progressive",'
+                '"opening_focus":"project ownership"}'
+            )
+        if "Evidence Agent" in system_message:
+            return '{"query":"project ownership and technical decisions"}'
+        raise AssertionError("未预期的测试 Agent 调用")
+
+    monkeypatch.setattr(structured_llm, "chat_with_messages", fake_llm)
+    monkeypatch.setattr(
+        evidence_retrieval_service,
+        "search_similar_chunks",
+        lambda **kwargs: {
+            "chunks": [],
+            "distance_metric": "l2_squared",
+        },
+    )
 
 
 def register_and_login(client, username):
@@ -248,6 +276,7 @@ def test_user_cannot_operate_other_users_session(client):
 def test_draft_session_can_start_and_completed_session_cannot_cancel(
     client,
     db_session,
+    mock_interview_agents,
 ):
     headers, _ = register_and_login(client, "alice")
     started_id = create_session(client, headers).json()["id"]

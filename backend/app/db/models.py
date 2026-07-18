@@ -210,6 +210,8 @@ class InterviewSession(Base):
     planned_main_questions = Column(Integer, nullable=False)
     current_main_question = Column(Integer, nullable=False, default=0)
     selected_project_file_ids = Column(JSON, nullable=False, default=list)
+    interview_plan = Column(JSON, nullable=True)
+    agent_execution_summary = Column(JSON, nullable=True)
     overall_score = Column(Integer, nullable=True)
     dimension_scores = Column(JSON, nullable=True)
     summary = Column(Text, nullable=True)
@@ -234,6 +236,12 @@ class InterviewSession(Base):
         back_populates="session",
         cascade="all, delete-orphan",
         order_by="ImprovementTask.id",
+    )
+    agent_runs = relationship(
+        "AgentRun",
+        back_populates="session",
+        cascade="all, delete-orphan",
+        order_by="AgentRun.id",
     )
 
 
@@ -402,3 +410,47 @@ class ImprovementTask(Base):
 
     session = relationship("InterviewSession", back_populates="improvement_tasks")
     turn = relationship("InterviewTurn", back_populates="improvement_tasks")
+
+
+class AgentRun(Base):
+    __tablename__ = "agent_runs"
+    __table_args__ = (
+        CheckConstraint(
+            "agent_name IN ('supervisor', 'evidence', 'interviewer')",
+            name="ck_agent_runs_agent_name",
+        ),
+        CheckConstraint(
+            "status IN ('success', 'error')",
+            name="ck_agent_runs_status",
+        ),
+        CheckConstraint(
+            "latency_ms >= 0",
+            name="ck_agent_runs_latency",
+        ),
+        Index("ix_agent_runs_session_created", "session_id", "created_at"),
+        Index("ix_agent_runs_user_created", "user_id", "created_at"),
+        Index("ix_agent_runs_run_id", "run_id"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    run_id = Column(Text, nullable=False)
+    session_id = Column(
+        Integer,
+        ForeignKey("interview_sessions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    agent_name = Column(Text, nullable=False, index=True)
+    prompt_version = Column(Text, nullable=False)
+    status = Column(Text, nullable=False, index=True)
+    latency_ms = Column(Integer, nullable=False)
+    error = Column(Text, nullable=True)
+    created_at = Column(Text, nullable=False, index=True)
+
+    session = relationship("InterviewSession", back_populates="agent_runs")

@@ -11,6 +11,7 @@ from app.services.document_loader import load_document_text
 from app.services.text_splitter import split_text
 
 COLLECTION_NAME = "personal_knowledge_base"
+DISTANCE_METRIC = "l2_squared"
 
 _embedding_model: SentenceTransformer | None = None
 _chroma_client: Any | None = None
@@ -107,6 +108,7 @@ def rebuild_vector_store(db: Session, user_id: int) -> dict[str, Any]:
                     "file_id": record.file_id,
                     "filename": record.filename,
                     "file_type": record.file_type,
+                    "category": record.category or "other",
                 },
                 chunk_size=800,
                 chunk_overlap=120,
@@ -202,6 +204,7 @@ def search_similar_chunks(
     return {
         "query": query,
         "top_k": top_k,
+        "distance_metric": DISTANCE_METRIC,
         "chunks": chunks,
     }
 

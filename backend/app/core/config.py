@@ -17,6 +17,9 @@ class Settings(BaseModel):
         "EMBEDDING_MODEL_NAME",
         "BAAI/bge-small-zh-v1.5",
     )
+    evidence_max_distance: float = float(
+        os.getenv("EVIDENCE_MAX_DISTANCE", "0.8")
+    )
 
     deepseek_api_key: str = os.getenv("DEEPSEEK_API_KEY", "")
     deepseek_base_url: str = os.getenv(

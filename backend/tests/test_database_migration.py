@@ -91,6 +91,30 @@ def test_training_tables_are_added_without_changing_existing_user(
                 "'2026-07-18T00:00:00')"
             )
         )
+        connection.execute(
+            text(
+                "CREATE TABLE interview_sessions ("
+                "id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL, "
+                "title TEXT NOT NULL, mode TEXT NOT NULL, status TEXT NOT NULL, "
+                "planned_main_questions INTEGER NOT NULL, "
+                "current_main_question INTEGER NOT NULL, "
+                "selected_project_file_ids JSON NOT NULL, "
+                "created_at TEXT NOT NULL, updated_at TEXT NOT NULL)"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO interview_sessions VALUES "
+                "(1, 1, 'existing session', 'quick', 'draft', 3, 0, "
+                "'[]', '2026-07-18T00:00:00', '2026-07-18T00:00:00')"
+            )
+        )
+        connection.execute(
+            text(
+                "CREATE INDEX ix_interview_sessions_user_status "
+                "ON interview_sessions (user_id, status)"
+            )
+        )
 
     monkeypatch.setattr(database, "engine", legacy_engine)
     database.init_db()
@@ -100,7 +124,13 @@ def test_training_tables_are_added_without_changing_existing_user(
         "interview_sessions",
         "interview_turns",
         "improvement_tasks",
+        "agent_runs",
     }.issubset(set(inspector.get_table_names()))
+    session_columns = {
+        column["name"] for column in inspector.get_columns("interview_sessions")
+    }
+    assert "interview_plan" in session_columns
+    assert "agent_execution_summary" in session_columns
     session_indexes = {
         index["name"] for index in inspector.get_indexes("interview_sessions")
     }
@@ -117,6 +147,11 @@ def test_training_tables_are_added_without_changing_existing_user(
                 "WHERE id = 1"
             )
         ).one()
+        existing_session = connection.execute(
+            text("SELECT title, status FROM interview_sessions WHERE id = 1")
+        ).one()
 
     assert existing_user.username == "existing-user"
     assert existing_user.password_hash == "existing-hash"
+    assert existing_session.title == "existing session"
+    assert existing_session.status == "draft"

@@ -44,6 +44,7 @@ def init_db():
     ensure_user_scope_columns()
     ensure_file_category_column()
     ensure_target_job_active_index()
+    ensure_interview_session_agent_columns()
 
 
 def get_db():
@@ -125,3 +126,22 @@ def ensure_target_job_active_index():
                 "ON target_jobs (user_id) WHERE is_active = 1"
             )
         )
+
+
+def ensure_interview_session_agent_columns():
+    inspector = inspect(engine)
+    columns = inspector.get_columns("interview_sessions")
+    column_names = {column["name"] for column in columns}
+
+    with engine.begin() as connection:
+        if "interview_plan" not in column_names:
+            connection.execute(
+                text("ALTER TABLE interview_sessions ADD COLUMN interview_plan JSON")
+            )
+        if "agent_execution_summary" not in column_names:
+            connection.execute(
+                text(
+                    "ALTER TABLE interview_sessions "
+                    "ADD COLUMN agent_execution_summary JSON"
+                )
+            )

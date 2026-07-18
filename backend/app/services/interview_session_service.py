@@ -263,6 +263,7 @@ def create_interview_turn(
     question: str,
     main_question_number: int | None = None,
     parent_turn_id: int | None = None,
+    commit: bool = True,
 ) -> InterviewTurn:
     interview_session = get_owned_session(db, user_id, session_id)
     normalized_question = question.strip()
@@ -333,6 +334,9 @@ def create_interview_turn(
         updated_at=now,
     )
     db.add(turn)
-    db.commit()
-    db.refresh(turn)
+    if commit:
+        db.commit()
+        db.refresh(turn)
+    else:
+        db.flush()
     return turn
