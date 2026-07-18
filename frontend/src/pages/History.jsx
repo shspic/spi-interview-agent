@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import apiClient from "../api/client";
 
@@ -42,7 +42,7 @@ function History() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
 
-  const fetchRecords = async (tabKey = activeTab) => {
+  const fetchRecords = useCallback(async (tabKey) => {
     try {
       setLoading(true);
       setMessage("正在加载历史记录...");
@@ -70,11 +70,13 @@ function History() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    fetchRecords(activeTab);
-  }, [activeTab]);
+    const timerId = window.setTimeout(() => fetchRecords(activeTab), 0);
+
+    return () => window.clearTimeout(timerId);
+  }, [activeTab, fetchRecords]);
 
   const handleTabChange = (tabKey) => {
     setActiveTab(tabKey);

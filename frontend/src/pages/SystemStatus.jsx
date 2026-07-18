@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import apiClient from "../api/client";
 
@@ -6,7 +6,7 @@ function SystemStatus() {
   const [status, setStatus] = useState(null);
   const [message, setMessage] = useState("");
 
-  const fetchStatus = async () => {
+  const fetchStatus = useCallback(async () => {
     try {
       setMessage("正在检查系统状态...");
       const response = await apiClient.get("/api/system/status");
@@ -17,11 +17,13 @@ function SystemStatus() {
       const detail = error.response?.data?.detail;
       setMessage(detail || "系统状态检查失败，请确认后端是否启动。");
     }
-  };
+  }, []);
 
   useEffect(() => {
-    fetchStatus();
-  }, []);
+    const timerId = window.setTimeout(fetchStatus, 0);
+
+    return () => window.clearTimeout(timerId);
+  }, [fetchStatus]);
 
   return (
     <section>

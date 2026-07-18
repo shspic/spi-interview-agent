@@ -20,8 +20,12 @@ export function getFriendlyErrorMessage(error, fallbackMessage = "请求失败�
     return "请求参数有误，请检查输入内容。";
   }
 
-  if (status === 401 || status === 403) {
-    return "接口鉴权失败，请检查 API Key 或后端配置。";
+  if (status === 401) {
+    return "登录状态已失效，请重新登录。";
+  }
+
+  if (status === 403) {
+    return "当前账号没有权限执行此操作。";
   }
 
   if (status === 404) {

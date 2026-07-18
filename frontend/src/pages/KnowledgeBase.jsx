@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import apiClient from "../api/client";
 import { getFriendlyErrorMessage } from "../utils/errorMessage";
@@ -10,7 +10,7 @@ function KnowledgeBase() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
 
-  const fetchFiles = async () => {
+  const fetchFiles = useCallback(async () => {
     try {
       setLoading(true);
       const response = await apiClient.get("/api/files");
@@ -22,9 +22,9 @@ function KnowledgeBase() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const fetchKnowledgeStatus = async () => {
+  const fetchKnowledgeStatus = useCallback(async () => {
     try {
       setLoading(true);
       setMessage("正在刷新知识库状态...");
@@ -40,16 +40,18 @@ function KnowledgeBase() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const refreshAll = async () => {
+  const refreshAll = useCallback(async () => {
     await fetchFiles();
     await fetchKnowledgeStatus();
-  };
+  }, [fetchFiles, fetchKnowledgeStatus]);
 
   useEffect(() => {
-    refreshAll();
-  }, []);
+    const timerId = window.setTimeout(refreshAll, 0);
+
+    return () => window.clearTimeout(timerId);
+  }, [refreshAll]);
 
   const handleFileChange = (event) => {
     const file = event.target.files?.[0];
