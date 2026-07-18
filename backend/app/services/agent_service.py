@@ -26,6 +26,7 @@ class AgentServiceError(Exception):
 
 class AgentState(TypedDict, total=False):
     question: str
+    user_id: int
     mode: AgentMode
     route: AgentRoute
     route_reason: str
@@ -209,10 +210,15 @@ def select_route_node(state: AgentState) -> dict:
 
 def retrieve_local_node(state: AgentState) -> dict:
     question = state.get("question", "")
+    user_id = state.get("user_id", 0)
     top_k = state.get("top_k", 5)
 
     try:
-        search_result = search_similar_chunks(query=question, top_k=top_k)
+        search_result = search_similar_chunks(
+            query=question,
+            user_id=user_id,
+            top_k=top_k,
+        )
     except Exception as exc:
         raise AgentServiceError(f"本地知识库检索失败：{exc}") from exc
 
@@ -335,6 +341,7 @@ AGENT_GRAPH = build_agent_graph()
 
 def ask_agent(
     question: str,
+    user_id: int,
     db: Session,
     mode: AgentMode = "auto",
     top_k: int = 5,
@@ -355,6 +362,7 @@ def ask_agent(
         result = AGENT_GRAPH.invoke(
             {
                 "question": cleaned_question,
+                "user_id": user_id,
                 "mode": mode,
                 "top_k": top_k,
                 "max_web_results": max_web_results,
@@ -373,6 +381,7 @@ def ask_agent(
     execution_steps = result.get("execution_steps", []) or []
 
     record = HistoryRecord(
+        user_id=user_id,
         record_id=str(uuid4()),
         mode="agent",
         user_input=cleaned_question,

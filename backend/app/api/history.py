@@ -3,8 +3,9 @@ import json
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
+from app.core.security import get_current_user
 from app.db.database import get_db
-from app.db.models import HistoryRecord
+from app.db.models import HistoryRecord, User
 
 router = APIRouter()
 
@@ -42,8 +43,11 @@ def history_record_to_dict(record: HistoryRecord) -> dict:
 def list_history(
     mode: str | None = Query(default=None, description="历史类型，例如 chat"),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    query = db.query(HistoryRecord)
+    query = db.query(HistoryRecord).filter(
+        HistoryRecord.user_id == current_user.id
+    )
 
     if mode:
         query = query.filter(HistoryRecord.mode == mode)
@@ -72,10 +76,16 @@ def list_history(
 def get_history_detail(
     record_id: str,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    record = db.query(HistoryRecord).filter(
-        HistoryRecord.record_id == record_id
-    ).first()
+    record = (
+        db.query(HistoryRecord)
+        .filter(
+            HistoryRecord.record_id == record_id,
+            HistoryRecord.user_id == current_user.id,
+        )
+        .first()
+    )
 
     if record is None:
         raise HTTPException(status_code=404, detail="历史记录不存在")
@@ -91,10 +101,16 @@ def get_history_detail(
 def delete_history(
     record_id: str,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    record = db.query(HistoryRecord).filter(
-        HistoryRecord.record_id == record_id
-    ).first()
+    record = (
+        db.query(HistoryRecord)
+        .filter(
+            HistoryRecord.record_id == record_id,
+            HistoryRecord.user_id == current_user.id,
+        )
+        .first()
+    )
 
     if record is None:
         raise HTTPException(status_code=404, detail="历史记录不存在")

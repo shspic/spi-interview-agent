@@ -14,12 +14,16 @@ class ChatServiceError(Exception):
     pass
 
 
-def ask_with_rag(question: str, db: Session) -> dict:
+def ask_with_rag(question: str, user_id: int, db: Session) -> dict:
     if not question.strip():
         raise ChatServiceError("问题不能为空")
 
     try:
-        search_result = search_similar_chunks(query=question, top_k=5)
+        search_result = search_similar_chunks(
+            query=question,
+            user_id=user_id,
+            top_k=5,
+        )
     except Exception as exc:
         raise ChatServiceError(f"知识库检索失败：{exc}") from exc
 
@@ -61,6 +65,7 @@ def ask_with_rag(question: str, db: Session) -> dict:
         raise ChatServiceError(str(exc)) from exc
 
     record = HistoryRecord(
+        user_id=user_id,
         record_id=str(uuid4()),
         mode="chat",
         user_input=question,

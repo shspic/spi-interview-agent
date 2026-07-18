@@ -4,7 +4,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from app.core.security import get_current_user
 from app.db.database import get_db
+from app.db.models import User
 from app.services.agent_service import AgentServiceError, ask_agent
 
 router = APIRouter()
@@ -25,10 +27,12 @@ class AgentAskRequest(BaseModel):
 def ask_agent_api(
     request: AgentAskRequest,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     try:
         return ask_agent(
             question=request.question,
+            user_id=current_user.id,
             mode=request.mode,
             top_k=request.top_k,
             max_web_results=request.max_web_results,

@@ -1,12 +1,30 @@
-from sqlalchemy import Column, Integer, Text
+from sqlalchemy import Boolean, Column, ForeignKey, Integer, Text
 
 from app.db.database import Base
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(Text, unique=True, index=True, nullable=False)
+    password_hash = Column(Text, nullable=False)
+    is_active = Column(Boolean, nullable=False, default=True)
+    is_admin = Column(Boolean, nullable=False, default=False)
+    created_at = Column(Text, nullable=False)
+    last_login_at = Column(Text, nullable=True)
 
 
 class FileRecord(Base):
     __tablename__ = "files"
 
     id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
     file_id = Column(Text, unique=True, index=True, nullable=False)
     filename = Column(Text, nullable=False)
     file_type = Column(Text, nullable=False)
@@ -21,6 +39,12 @@ class HistoryRecord(Base):
     __tablename__ = "history_records"
 
     id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
     record_id = Column(Text, unique=True, index=True, nullable=False)
     mode = Column(Text, nullable=False)
     user_input = Column(Text, nullable=False)
@@ -37,6 +61,12 @@ class InterviewRecord(Base):
     __tablename__ = "interview_records"
 
     id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
     session_id = Column(Text, index=True, nullable=False)
     interview_type = Column(Text, nullable=False)
     job_description = Column(Text, nullable=True)

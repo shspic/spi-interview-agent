@@ -17,9 +17,17 @@ class InterviewServiceError(Exception):
     pass
 
 
-def _build_context_and_sources(query: str, top_k: int = 8) -> tuple[str, list[dict]]:
+def _build_context_and_sources(
+    query: str,
+    user_id: int,
+    top_k: int = 8,
+) -> tuple[str, list[dict]]:
     try:
-        search_result = search_similar_chunks(query=query, top_k=top_k)
+        search_result = search_similar_chunks(
+            query=query,
+            user_id=user_id,
+            top_k=top_k,
+        )
     except Exception as exc:
         raise InterviewServiceError(f"知识库检索失败：{exc}") from exc
 
@@ -86,6 +94,7 @@ def generate_interview_question(
     interview_type: str,
     job_description: str,
     question_index: int,
+    user_id: int,
 ) -> dict:
     if not interview_type.strip():
         raise InterviewServiceError("面试类型不能为空")
@@ -94,7 +103,11 @@ def generate_interview_question(
         raise InterviewServiceError("岗位 JD 不能为空")
 
     query = f"{interview_type}\n{job_description}"
-    context, sources = _build_context_and_sources(query=query, top_k=8)
+    context, sources = _build_context_and_sources(
+        query=query,
+        user_id=user_id,
+        top_k=8,
+    )
 
     messages = build_interview_question_messages(
         interview_type=interview_type,
@@ -124,6 +137,7 @@ def evaluate_interview_answer(
     question_index: int,
     question: str,
     user_answer: str,
+    user_id: int,
     db: Session,
 ) -> dict:
     if not question.strip():
@@ -133,7 +147,11 @@ def evaluate_interview_answer(
         raise InterviewServiceError("用户回答不能为空")
 
     query = f"{interview_type}\n{job_description}\n{question}\n{user_answer}"
-    context, sources = _build_context_and_sources(query=query, top_k=8)
+    context, sources = _build_context_and_sources(
+        query=query,
+        user_id=user_id,
+        top_k=8,
+    )
 
     messages = build_interview_evaluation_messages(
         interview_type=interview_type,
@@ -153,6 +171,7 @@ def evaluate_interview_answer(
     session_id = str(uuid4())
 
     record = InterviewRecord(
+        user_id=user_id,
         session_id=session_id,
         interview_type=interview_type,
         job_description=job_description,

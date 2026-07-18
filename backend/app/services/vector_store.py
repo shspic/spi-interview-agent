@@ -54,26 +54,47 @@ def get_collection():
     return client.get_or_create_collection(name=COLLECTION_NAME)
 
 
-def reset_collection():
-    client = get_chroma_client()
-
-    try:
-        client.delete_collection(name=COLLECTION_NAME)
-    except Exception:
-        pass
-
-    return client.get_or_create_collection(name=COLLECTION_NAME)
+def get_user_filter(user_id: int) -> dict[str, int]:
+    return {"user_id": user_id}
 
 
-def rebuild_vector_store(db: Session) -> dict[str, Any]:
-    collection = reset_collection()
-    model = get_embedding_model()
+def delete_file_vectors(user_id: int, file_id: str) -> None:
+    collection = get_collection()
+    collection.delete(
+        where={
+            "$and": [
+                {"user_id": user_id},
+                {"file_id": file_id},
+            ]
+        }
+    )
 
-    records = db.query(FileRecord).order_by(FileRecord.id.asc()).all()
+
+def rebuild_vector_store(db: Session, user_id: int) -> dict[str, Any]:
+    collection = get_collection()
+    collection.delete(where=get_user_filter(user_id))
+
+    records = (
+        db.query(FileRecord)
+        .filter(FileRecord.user_id == user_id)
+        .order_by(FileRecord.id.asc())
+        .all()
+    )
 
     indexed_files = 0
     failed_files = 0
     total_chunks = 0
+
+    if not records:
+        return {
+            "success": True,
+            "indexed_files": 0,
+            "failed_files": 0,
+            "total_chunks": 0,
+            "status": "empty",
+        }
+
+    model = get_embedding_model()
 
     for record in records:
         try:
@@ -82,6 +103,7 @@ def rebuild_vector_store(db: Session) -> dict[str, Any]:
             chunks = split_text(
                 text=text,
                 metadata={
+                    "user_id": user_id,
                     "file_id": record.file_id,
                     "filename": record.filename,
                     "file_type": record.file_type,
@@ -99,7 +121,7 @@ def rebuild_vector_store(db: Session) -> dict[str, Any]:
             documents = [chunk.content for chunk in chunks]
             metadatas = [chunk.metadata for chunk in chunks]
             ids = [
-                f"{record.file_id}_{chunk.metadata['chunk_index']}"
+                f"{user_id}_{record.file_id}_{chunk.metadata['chunk_index']}"
                 for chunk in chunks
             ]
 
@@ -136,7 +158,11 @@ def rebuild_vector_store(db: Session) -> dict[str, Any]:
     }
 
 
-def search_similar_chunks(query: str, top_k: int = 5) -> dict[str, Any]:
+def search_similar_chunks(
+    query: str,
+    user_id: int,
+    top_k: int = 5,
+) -> dict[str, Any]:
     if not query.strip():
         raise ValueError("query 不能为空")
 
@@ -154,6 +180,7 @@ def search_similar_chunks(query: str, top_k: int = 5) -> dict[str, Any]:
     result = collection.query(
         query_embeddings=query_embedding,
         n_results=top_k,
+        where=get_user_filter(user_id),
         include=["documents", "metadatas", "distances"],
     )
 
@@ -179,15 +206,33 @@ def search_similar_chunks(query: str, top_k: int = 5) -> dict[str, Any]:
     }
 
 
-def get_vector_store_status(db: Session) -> dict[str, Any]:
+def get_vector_store_status(db: Session, user_id: int) -> dict[str, Any]:
     collection = get_collection()
 
-    total_files = db.query(FileRecord).count()
-    indexed_files = db.query(FileRecord).filter(FileRecord.status == "indexed").count()
-    failed_files = db.query(FileRecord).filter(FileRecord.status == "failed").count()
+    total_files = db.query(FileRecord).filter(FileRecord.user_id == user_id).count()
+    indexed_files = (
+        db.query(FileRecord)
+        .filter(
+            FileRecord.user_id == user_id,
+            FileRecord.status == "indexed",
+        )
+        .count()
+    )
+    failed_files = (
+        db.query(FileRecord)
+        .filter(
+            FileRecord.user_id == user_id,
+            FileRecord.status == "failed",
+        )
+        .count()
+    )
 
     try:
-        total_chunks = collection.count()
+        vector_data = collection.get(
+            where=get_user_filter(user_id),
+            include=["metadatas"],
+        )
+        total_chunks = len(vector_data.get("ids", []) or [])
     except Exception:
         total_chunks = 0
 

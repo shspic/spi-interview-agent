@@ -7,29 +7,33 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.security import get_current_user
 from app.db.database import get_db
-from app.db.models import FileRecord
+from app.db.models import FileRecord, User
+from app.services.vector_store import delete_file_vectors
 
 router = APIRouter()
 
 ALLOWED_EXTENSIONS = {".md", ".txt", ".pdf"}
 
 
-def get_upload_dir() -> Path:
+def get_upload_dir(user_id: int) -> Path:
     upload_dir = Path(settings.upload_dir)
 
     if not upload_dir.is_absolute():
         backend_dir = Path(__file__).resolve().parents[2]
         upload_dir = backend_dir / upload_dir
 
-    upload_dir.mkdir(parents=True, exist_ok=True)
-    return upload_dir
+    user_upload_dir = upload_dir / str(user_id)
+    user_upload_dir.mkdir(parents=True, exist_ok=True)
+    return user_upload_dir
 
 
 @router.post("/files/upload")
 def upload_file(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     original_filename = Path(file.filename or "").name
     suffix = Path(original_filename).suffix.lower()
@@ -42,7 +46,7 @@ def upload_file(
 
     file_id = str(uuid4())
     saved_filename = f"{file_id}{suffix}"
-    upload_dir = get_upload_dir()
+    upload_dir = get_upload_dir(current_user.id)
     file_path = upload_dir / saved_filename
 
     try:
@@ -57,6 +61,7 @@ def upload_file(
     now = datetime.now().isoformat(timespec="seconds")
 
     record = FileRecord(
+        user_id=current_user.id,
         file_id=file_id,
         filename=original_filename,
         file_type=suffix.lstrip("."),
@@ -81,8 +86,16 @@ def upload_file(
 
 
 @router.get("/files")
-def list_files(db: Session = Depends(get_db)):
-    records = db.query(FileRecord).order_by(FileRecord.id.desc()).all()
+def list_files(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    records = (
+        db.query(FileRecord)
+        .filter(FileRecord.user_id == current_user.id)
+        .order_by(FileRecord.id.desc())
+        .all()
+    )
 
     return {
         "files": [
@@ -101,16 +114,41 @@ def list_files(db: Session = Depends(get_db)):
 
 
 @router.delete("/files/{file_id}")
-def delete_file(file_id: str, db: Session = Depends(get_db)):
-    record = db.query(FileRecord).filter(FileRecord.file_id == file_id).first()
+def delete_file(
+    file_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    record = (
+        db.query(FileRecord)
+        .filter(
+            FileRecord.file_id == file_id,
+            FileRecord.user_id == current_user.id,
+        )
+        .first()
+    )
 
     if record is None:
         raise HTTPException(status_code=404, detail="文件不存在")
 
     file_path = Path(record.file_path)
 
+    try:
+        delete_file_vectors(current_user.id, record.file_id)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail="文件向量删除失败，请稍后重试",
+        ) from exc
+
     if file_path.exists():
-        file_path.unlink()
+        try:
+            file_path.unlink()
+        except OSError as exc:
+            raise HTTPException(
+                status_code=500,
+                detail="文件删除失败，请稍后重试",
+            ) from exc
 
     db.delete(record)
     db.commit()

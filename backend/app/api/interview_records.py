@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from app.core.security import get_current_user
 from app.db.database import get_db
-from app.db.models import InterviewRecord
+from app.db.models import InterviewRecord, User
 
 router = APIRouter()
 
@@ -35,8 +36,14 @@ def interview_record_to_dict(record: InterviewRecord) -> dict:
 )
 def list_interview_records(
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    records = db.query(InterviewRecord).order_by(InterviewRecord.id.desc()).all()
+    records = (
+        db.query(InterviewRecord)
+        .filter(InterviewRecord.user_id == current_user.id)
+        .order_by(InterviewRecord.id.desc())
+        .all()
+    )
 
     return {
         "records": [
@@ -61,10 +68,16 @@ def list_interview_records(
 def get_interview_record_detail(
     session_id: str,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    record = db.query(InterviewRecord).filter(
-        InterviewRecord.session_id == session_id
-    ).first()
+    record = (
+        db.query(InterviewRecord)
+        .filter(
+            InterviewRecord.session_id == session_id,
+            InterviewRecord.user_id == current_user.id,
+        )
+        .first()
+    )
 
     if record is None:
         raise HTTPException(status_code=404, detail="模拟面试记录不存在")
@@ -80,10 +93,16 @@ def get_interview_record_detail(
 def delete_interview_record(
     session_id: str,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    record = db.query(InterviewRecord).filter(
-        InterviewRecord.session_id == session_id
-    ).first()
+    record = (
+        db.query(InterviewRecord)
+        .filter(
+            InterviewRecord.session_id == session_id,
+            InterviewRecord.user_id == current_user.id,
+        )
+        .first()
+    )
 
     if record is None:
         raise HTTPException(status_code=404, detail="模拟面试记录不存在")

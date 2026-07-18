@@ -94,6 +94,7 @@ def build_web_context_and_sources(job_description: str) -> tuple[str, list[dict]
 
 def analyze_job(
     job_description: str,
+    user_id: int,
     db: Session,
     use_web_search: bool = False,
 ) -> dict:
@@ -101,7 +102,11 @@ def analyze_job(
         raise JobServiceError("岗位 JD 不能为空")
 
     try:
-        search_result = search_similar_chunks(query=job_description, top_k=8)
+        search_result = search_similar_chunks(
+            query=job_description,
+            user_id=user_id,
+            top_k=8,
+        )
     except Exception as exc:
         raise JobServiceError(f"知识库检索失败：{exc}") from exc
 
@@ -131,6 +136,7 @@ def analyze_job(
         raise JobServiceError(str(exc)) from exc
 
     record = HistoryRecord(
+        user_id=user_id,
         record_id=str(uuid4()),
         mode="job_analysis",
         user_input=job_description,

@@ -27,5 +27,9 @@ class Settings(BaseModel):
 
     tavily_api_key: str = os.getenv("TAVILY_API_KEY", "")
 
+    registration_invite_code: str = os.getenv("REGISTRATION_INVITE_CODE", "")
+    jwt_secret_key: str = os.getenv("JWT_SECRET_KEY", "")
+    jwt_expire_minutes: int = int(os.getenv("JWT_EXPIRE_MINUTES", "120"))
+
 
 settings = Settings()

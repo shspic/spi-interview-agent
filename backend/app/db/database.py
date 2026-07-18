@@ -1,10 +1,9 @@
 from pathlib import Path
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event, inspect, text
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 from app.core.config import settings
-from sqlalchemy import inspect, text
 
 db_path = Path(settings.sqlite_db_path)
 
@@ -21,6 +20,13 @@ engine = create_engine(
     connect_args={"check_same_thread": False},
 )
 
+
+@event.listens_for(engine, "connect")
+def enable_sqlite_foreign_keys(dbapi_connection, connection_record):
+    cursor = dbapi_connection.cursor()
+    cursor.execute("PRAGMA foreign_keys=ON")
+    cursor.close()
+
 SessionLocal = sessionmaker(
     autocommit=False,
     autoflush=False,
@@ -35,6 +41,7 @@ def init_db():
 
     Base.metadata.create_all(bind=engine)
     ensure_history_records_columns()
+    ensure_user_scope_columns()
 
 
 def get_db():
@@ -59,4 +66,33 @@ def ensure_history_records_columns():
         if "execution_steps" not in column_names:
             connection.execute(
                 text("ALTER TABLE history_records ADD COLUMN execution_steps TEXT DEFAULT ''")
+            )
+
+
+def ensure_user_scope_columns():
+    inspector = inspect(engine)
+    table_indexes = {
+        "files": "ix_files_user_id",
+        "history_records": "ix_history_records_user_id",
+        "interview_records": "ix_interview_records_user_id",
+    }
+
+    with engine.begin() as connection:
+        for table_name, index_name in table_indexes.items():
+            columns = inspector.get_columns(table_name)
+            column_names = {column["name"] for column in columns}
+
+            if "user_id" not in column_names:
+                connection.execute(
+                    text(
+                        f"ALTER TABLE {table_name} "
+                        "ADD COLUMN user_id INTEGER REFERENCES users(id)"
+                    )
+                )
+
+            connection.execute(
+                text(
+                    f"CREATE INDEX IF NOT EXISTS {index_name} "
+                    f"ON {table_name} (user_id)"
+                )
             )

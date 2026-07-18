@@ -2,7 +2,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app.core.security import get_current_user
 from app.db.database import get_db
+from app.db.models import User
 from app.services.job_service import JobServiceError, analyze_job
 
 router = APIRouter()
@@ -21,10 +23,12 @@ class JobAnalyzeRequest(BaseModel):
 def analyze_job_api(
     request: JobAnalyzeRequest,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     try:
         return analyze_job(
             job_description=request.job_description,
+            user_id=current_user.id,
             db=db,
             use_web_search=request.use_web_search,
         )
