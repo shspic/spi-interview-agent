@@ -7,6 +7,7 @@ function KnowledgeBase() {
   const [files, setFiles] = useState([]);
   const [knowledgeStatus, setKnowledgeStatus] = useState(null);
   const [selectedFile, setSelectedFile] = useState(null);
+  const [selectedCategory, setSelectedCategory] = useState("other");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -82,6 +83,7 @@ function KnowledgeBase() {
 
     const formData = new FormData();
     formData.append("file", selectedFile);
+    formData.append("category", selectedCategory);
 
     try {
       setLoading(true);
@@ -188,6 +190,16 @@ function KnowledgeBase() {
           onChange={handleFileChange}
         />
 
+        <select
+          value={selectedCategory}
+          onChange={(event) => setSelectedCategory(event.target.value)}
+          aria-label="文件分类"
+        >
+          <option value="resume">简历</option>
+          <option value="project">项目资料</option>
+          <option value="other">其他</option>
+        </select>
+
         <button type="button" onClick={handleUpload} disabled={loading}>
           {loading ? "处理中..." : "上传文件"}
         </button>
@@ -262,6 +274,7 @@ function KnowledgeBase() {
             <tr>
               <th>文件名</th>
               <th>类型</th>
+              <th>分类</th>
               <th>状态</th>
               <th>上传时间</th>
               <th>操作</th>
@@ -273,6 +286,13 @@ function KnowledgeBase() {
               <tr key={file.file_id}>
                 <td>{file.filename}</td>
                 <td>{file.file_type}</td>
+                <td>
+                  {file.category === "resume"
+                    ? "简历"
+                    : file.category === "project"
+                      ? "项目资料"
+                      : "其他"}
+                </td>
                 <td>{file.status}</td>
                 <td>{file.created_at}</td>
                 <td>

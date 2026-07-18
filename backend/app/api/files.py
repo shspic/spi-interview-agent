@@ -3,7 +3,7 @@ from pathlib import Path
 from uuid import uuid4
 import shutil
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -15,6 +15,7 @@ from app.services.vector_store import delete_file_vectors
 router = APIRouter()
 
 ALLOWED_EXTENSIONS = {".md", ".txt", ".pdf"}
+ALLOWED_CATEGORIES = {"resume", "project", "other"}
 
 
 def get_upload_dir(user_id: int) -> Path:
@@ -32,9 +33,18 @@ def get_upload_dir(user_id: int) -> Path:
 @router.post("/files/upload")
 def upload_file(
     file: UploadFile = File(...),
+    category: str = Form(default="other"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    normalized_category = category.strip().lower()
+
+    if normalized_category not in ALLOWED_CATEGORIES:
+        raise HTTPException(
+            status_code=400,
+            detail="文件分类只能是 resume、project 或 other",
+        )
+
     original_filename = Path(file.filename or "").name
     suffix = Path(original_filename).suffix.lower()
 
@@ -66,6 +76,7 @@ def upload_file(
         filename=original_filename,
         file_type=suffix.lstrip("."),
         file_path=str(file_path),
+        category=normalized_category,
         status="uploaded",
         error_message=None,
         created_at=now,
@@ -80,6 +91,7 @@ def upload_file(
         "file_id": record.file_id,
         "filename": record.filename,
         "file_type": record.file_type,
+        "category": record.category,
         "status": record.status,
         "created_at": record.created_at,
     }
@@ -103,6 +115,7 @@ def list_files(
                 "file_id": record.file_id,
                 "filename": record.filename,
                 "file_type": record.file_type,
+                "category": record.category or "other",
                 "status": record.status,
                 "error_message": record.error_message,
                 "created_at": record.created_at,

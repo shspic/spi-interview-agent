@@ -35,6 +35,7 @@ def test_legacy_rows_are_preserved_with_null_user_id(tmp_path, monkeypatch):
 
     monkeypatch.setattr(database, "engine", legacy_engine)
     database.ensure_user_scope_columns()
+    database.ensure_file_category_column()
 
     inspector = inspect(legacy_engine)
     for table_name in ("files", "history_records", "interview_records"):
@@ -50,3 +51,10 @@ def test_legacy_rows_are_preserved_with_null_user_id(tmp_path, monkeypatch):
 
         assert row.row_count == 1
         assert row.user_id is None
+
+    with legacy_engine.connect() as connection:
+        legacy_file = connection.execute(
+            text("SELECT category FROM files WHERE id = 1")
+        ).one()
+
+    assert legacy_file.category == "other"

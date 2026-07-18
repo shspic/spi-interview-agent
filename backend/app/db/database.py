@@ -42,6 +42,8 @@ def init_db():
     Base.metadata.create_all(bind=engine)
     ensure_history_records_columns()
     ensure_user_scope_columns()
+    ensure_file_category_column()
+    ensure_target_job_active_index()
 
 
 def get_db():
@@ -96,3 +98,30 @@ def ensure_user_scope_columns():
                     f"ON {table_name} (user_id)"
                 )
             )
+
+
+def ensure_file_category_column():
+    inspector = inspect(engine)
+    columns = inspector.get_columns("files")
+    column_names = {column["name"] for column in columns}
+
+    if "category" in column_names:
+        return
+
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "ALTER TABLE files ADD COLUMN category TEXT "
+                "NOT NULL DEFAULT 'other'"
+            )
+        )
+
+
+def ensure_target_job_active_index():
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS ux_target_jobs_active_user "
+                "ON target_jobs (user_id) WHERE is_active = 1"
+            )
+        )

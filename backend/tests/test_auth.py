@@ -94,6 +94,8 @@ def test_wrong_password_cannot_login(client):
         ("post", "/api/agent/ask", {"question": "test"}),
         ("get", "/api/history", None),
         ("get", "/api/system/status", None),
+        ("get", "/api/profile", None),
+        ("get", "/api/target-jobs", None),
     ],
 )
 def test_unauthenticated_request_cannot_access_protected_api(

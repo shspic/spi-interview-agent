@@ -1,4 +1,5 @@
-from sqlalchemy import Boolean, Column, ForeignKey, Integer, Text
+from sqlalchemy import Boolean, Column, ForeignKey, Index, Integer, Text, text
+from sqlalchemy.orm import relationship
 
 from app.db.database import Base
 
@@ -13,6 +14,65 @@ class User(Base):
     is_admin = Column(Boolean, nullable=False, default=False)
     created_at = Column(Text, nullable=False)
     last_login_at = Column(Text, nullable=True)
+    profile = relationship(
+        "UserProfile",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        uselist=False,
+    )
+    target_jobs = relationship(
+        "TargetJob",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+
+
+class UserProfile(Base):
+    __tablename__ = "user_profiles"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        unique=True,
+        nullable=False,
+        index=True,
+    )
+    display_name = Column(Text, nullable=False, default="")
+    target_direction = Column(Text, nullable=False, default="")
+    self_introduction = Column(Text, nullable=False, default="")
+    technical_skills = Column(Text, nullable=False, default="[]")
+    created_at = Column(Text, nullable=False)
+    updated_at = Column(Text, nullable=False)
+    user = relationship("User", back_populates="profile")
+
+
+class TargetJob(Base):
+    __tablename__ = "target_jobs"
+    __table_args__ = (
+        Index(
+            "ux_target_jobs_active_user",
+            "user_id",
+            unique=True,
+            sqlite_where=text("is_active = 1"),
+        ),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    job_title = Column(Text, nullable=False)
+    company_name = Column(Text, nullable=False, default="")
+    jd_text = Column(Text, nullable=False)
+    notes = Column(Text, nullable=False, default="")
+    is_active = Column(Boolean, nullable=False, default=False, index=True)
+    created_at = Column(Text, nullable=False)
+    updated_at = Column(Text, nullable=False)
+    user = relationship("User", back_populates="target_jobs")
 
 
 class FileRecord(Base):
@@ -29,6 +89,7 @@ class FileRecord(Base):
     filename = Column(Text, nullable=False)
     file_type = Column(Text, nullable=False)
     file_path = Column(Text, nullable=False)
+    category = Column(Text, nullable=False, default="other", server_default="other")
     status = Column(Text, nullable=False, default="uploaded")
     error_message = Column(Text, nullable=True)
     created_at = Column(Text, nullable=False)

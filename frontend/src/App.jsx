@@ -10,6 +10,7 @@ import Interview from "./pages/Interview";
 import History from "./pages/History";
 import SystemStatus from "./pages/SystemStatus";
 import AuthPage from "./pages/AuthPage";
+import Profile from "./pages/Profile";
 
 import "./index.css";
 
@@ -58,13 +59,22 @@ const pages = [
   },
 ];
 
+const profilePage = {
+  key: "profile",
+  label: "我的资料",
+  description: "维护个人介绍、技术栈、资料文件分类和当前目标岗位。",
+};
+
 function App() {
   const { currentUser, isAuthenticated, isLoading, logout } = useAuth();
   const [activePage, setActivePage] = useState("knowledge");
   const [backendStatus, setBackendStatus] = useState("检查中");
   const [userMenuOpen, setUserMenuOpen] = useState(false);
 
-  const currentPage = pages.find((page) => page.key === activePage);
+  const currentPage =
+    activePage === "profile"
+      ? profilePage
+      : pages.find((page) => page.key === activePage);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -138,6 +148,15 @@ function App() {
               <button
                 type="button"
                 onClick={() => {
+                  setActivePage("profile");
+                  setUserMenuOpen(false);
+                }}
+              >
+                我的资料
+              </button>
+              <button
+                type="button"
+                onClick={() => {
                   setUserMenuOpen(false);
                   logout();
                 }}
@@ -172,20 +191,38 @@ function App() {
             <p>{currentPage?.description}</p>
           </div>
 
-          <div
-            className={
-              backendStatus === "ok"
-                ? "status-card is-online"
-                : "status-card is-offline"
-            }
-          >
-            <span className="status-dot" />
-            <span>后端状态</span>
-            <strong>{backendStatus}</strong>
+          <div className="top-panel-actions">
+            {activePage !== "profile" && (
+              <button
+                type="button"
+                className="profile-entry-button"
+                onClick={() => setActivePage("profile")}
+              >
+                完善资料
+              </button>
+            )}
+
+            <div
+              className={
+                backendStatus === "ok"
+                  ? "status-card is-online"
+                  : "status-card is-offline"
+              }
+            >
+              <span className="status-dot" />
+              <span>后端状态</span>
+              <strong>{backendStatus}</strong>
+            </div>
           </div>
         </header>
 
-        <div className="content-card">{currentPage?.component}</div>
+        <div className="content-card">
+          {activePage === "profile" ? (
+            <Profile onOpenKnowledge={() => setActivePage("knowledge")} />
+          ) : (
+            currentPage?.component
+          )}
+        </div>
       </main>
     </div>
   );
