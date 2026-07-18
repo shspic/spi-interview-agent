@@ -4,6 +4,7 @@ from sqlalchemy import (
     CheckConstraint,
     Column,
     ForeignKey,
+    Float,
     Index,
     Integer,
     Text,
@@ -212,7 +213,7 @@ class InterviewSession(Base):
     selected_project_file_ids = Column(JSON, nullable=False, default=list)
     interview_plan = Column(JSON, nullable=True)
     agent_execution_summary = Column(JSON, nullable=True)
-    overall_score = Column(Integer, nullable=True)
+    overall_score = Column(Float, nullable=True)
     dimension_scores = Column(JSON, nullable=True)
     summary = Column(Text, nullable=True)
     started_at = Column(Text, nullable=True)
@@ -342,6 +343,9 @@ class InterviewTurn(Base):
     has_evidence_conflict = Column(Boolean, nullable=False, default=False)
     evidence_conflicts = Column(JSON, nullable=True)
     evidence_sources = Column(JSON, nullable=True)
+    evaluation_source_ids = Column(JSON, nullable=True)
+    unsupported_claims = Column(JSON, nullable=True)
+    strengths = Column(JSON, nullable=True)
     answered_at = Column(Text, nullable=True)
     created_at = Column(Text, nullable=False)
     updated_at = Column(Text, nullable=False)
@@ -416,7 +420,7 @@ class AgentRun(Base):
     __tablename__ = "agent_runs"
     __table_args__ = (
         CheckConstraint(
-            "agent_name IN ('supervisor', 'evidence', 'interviewer')",
+            "agent_name IN ('supervisor', 'evidence', 'evaluation', 'interviewer')",
             name="ck_agent_runs_agent_name",
         ),
         CheckConstraint(

@@ -45,6 +45,8 @@ def init_db():
     ensure_file_category_column()
     ensure_target_job_active_index()
     ensure_interview_session_agent_columns()
+    ensure_interview_turn_evaluation_columns()
+    ensure_agent_run_supports_evaluation()
 
 
 def get_db():
@@ -145,3 +147,81 @@ def ensure_interview_session_agent_columns():
                     "ADD COLUMN agent_execution_summary JSON"
                 )
             )
+
+
+def ensure_interview_turn_evaluation_columns():
+    inspector = inspect(engine)
+    columns = inspector.get_columns("interview_turns")
+    column_names = {column["name"] for column in columns}
+    new_columns = {
+        "evaluation_source_ids": "JSON",
+        "unsupported_claims": "JSON",
+        "strengths": "JSON",
+    }
+
+    with engine.begin() as connection:
+        for column_name, column_type in new_columns.items():
+            if column_name not in column_names:
+                connection.execute(
+                    text(
+                        f"ALTER TABLE interview_turns "
+                        f"ADD COLUMN {column_name} {column_type}"
+                    )
+                )
+
+
+def ensure_agent_run_supports_evaluation():
+    with engine.connect() as connection:
+        table_sql = connection.execute(
+            text(
+                "SELECT sql FROM sqlite_master "
+                "WHERE type = 'table' AND name = 'agent_runs'"
+            )
+        ).scalar_one_or_none()
+
+    if table_sql is None or "'evaluation'" in table_sql:
+        return
+
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "CREATE TABLE agent_runs_new ("
+                "id INTEGER NOT NULL PRIMARY KEY, "
+                "run_id TEXT NOT NULL, "
+                "session_id INTEGER NOT NULL REFERENCES interview_sessions(id) "
+                "ON DELETE CASCADE, "
+                "user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, "
+                "agent_name TEXT NOT NULL CHECK (agent_name IN "
+                "('supervisor', 'evidence', 'evaluation', 'interviewer')), "
+                "prompt_version TEXT NOT NULL, "
+                "status TEXT NOT NULL CHECK (status IN ('success', 'error')), "
+                "latency_ms INTEGER NOT NULL CHECK (latency_ms >= 0), "
+                "error TEXT, created_at TEXT NOT NULL)"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO agent_runs_new "
+                "(id, run_id, session_id, user_id, agent_name, prompt_version, "
+                "status, latency_ms, error, created_at) "
+                "SELECT id, run_id, session_id, user_id, agent_name, "
+                "prompt_version, status, latency_ms, error, created_at "
+                "FROM agent_runs"
+            )
+        )
+        connection.execute(text("DROP TABLE agent_runs"))
+        connection.execute(text("ALTER TABLE agent_runs_new RENAME TO agent_runs"))
+        for index_sql in (
+            "CREATE INDEX ix_agent_runs_id ON agent_runs (id)",
+            "CREATE INDEX ix_agent_runs_session_id ON agent_runs (session_id)",
+            "CREATE INDEX ix_agent_runs_user_id ON agent_runs (user_id)",
+            "CREATE INDEX ix_agent_runs_agent_name ON agent_runs (agent_name)",
+            "CREATE INDEX ix_agent_runs_status ON agent_runs (status)",
+            "CREATE INDEX ix_agent_runs_created_at ON agent_runs (created_at)",
+            "CREATE INDEX ix_agent_runs_session_created "
+            "ON agent_runs (session_id, created_at)",
+            "CREATE INDEX ix_agent_runs_user_created "
+            "ON agent_runs (user_id, created_at)",
+            "CREATE INDEX ix_agent_runs_run_id ON agent_runs (run_id)",
+        ):
+            connection.execute(text(index_sql))

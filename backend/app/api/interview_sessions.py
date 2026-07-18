@@ -90,6 +90,9 @@ def turn_to_response(turn: InterviewTurn) -> InterviewTurnResponse:
         has_evidence_conflict=bool(turn.has_evidence_conflict),
         evidence_conflicts=turn.evidence_conflicts,
         evidence_sources=turn.evidence_sources,
+        evaluation_source_ids=turn.evaluation_source_ids,
+        unsupported_claims=turn.unsupported_claims,
+        strengths=turn.strengths,
         answered_at=turn.answered_at,
         created_at=turn.created_at,
         updated_at=turn.updated_at,
@@ -437,6 +440,7 @@ def answer_session_question(
     return InterviewAnswerResponse(
         **base.model_dump(),
         decision=result.decision,
+        answered_turn=turn_to_response(result.answered_turn),
         current_question=(
             turn_to_response(progress["current_question"])
             if progress["current_question"] is not None

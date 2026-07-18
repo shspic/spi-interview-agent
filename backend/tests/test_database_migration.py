@@ -115,6 +115,42 @@ def test_training_tables_are_added_without_changing_existing_user(
                 "ON interview_sessions (user_id, status)"
             )
         )
+        connection.execute(
+            text(
+                "CREATE TABLE interview_turns ("
+                "id INTEGER PRIMARY KEY, session_id INTEGER NOT NULL, "
+                "user_id INTEGER NOT NULL, sequence_number INTEGER NOT NULL, "
+                "main_question_number INTEGER NOT NULL, "
+                "follow_up_number INTEGER NOT NULL, parent_turn_id INTEGER, "
+                "question TEXT NOT NULL, question_type TEXT NOT NULL, "
+                "user_answer TEXT, technical_accuracy_score INTEGER, "
+                "evidence_consistency_score INTEGER, answer_depth_score INTEGER, "
+                "expression_structure_score INTEGER, job_match_score INTEGER, "
+                "total_score INTEGER, evaluation_summary TEXT, problems JSON, "
+                "optimized_answer TEXT, modification_reason TEXT, "
+                "has_evidence_conflict BOOLEAN NOT NULL, "
+                "evidence_conflicts JSON, evidence_sources JSON, answered_at TEXT, "
+                "created_at TEXT NOT NULL, updated_at TEXT NOT NULL)"
+            )
+        )
+        connection.execute(
+            text(
+                "CREATE TABLE agent_runs ("
+                "id INTEGER PRIMARY KEY, run_id TEXT NOT NULL, "
+                "session_id INTEGER NOT NULL, user_id INTEGER NOT NULL, "
+                "agent_name TEXT NOT NULL CHECK (agent_name IN "
+                "('supervisor', 'evidence', 'interviewer')), "
+                "prompt_version TEXT NOT NULL, status TEXT NOT NULL, "
+                "latency_ms INTEGER NOT NULL, error TEXT, created_at TEXT NOT NULL)"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO agent_runs VALUES "
+                "(1, 'existing-run', 1, 1, 'supervisor', 'v1', "
+                "'success', 10, NULL, '2026-07-18T00:00:00')"
+            )
+        )
 
     monkeypatch.setattr(database, "engine", legacy_engine)
     database.init_db()
@@ -131,6 +167,14 @@ def test_training_tables_are_added_without_changing_existing_user(
     }
     assert "interview_plan" in session_columns
     assert "agent_execution_summary" in session_columns
+    turn_columns = {
+        column["name"] for column in inspector.get_columns("interview_turns")
+    }
+    assert {
+        "evaluation_source_ids",
+        "unsupported_claims",
+        "strengths",
+    }.issubset(turn_columns)
     session_indexes = {
         index["name"] for index in inspector.get_indexes("interview_sessions")
     }
@@ -150,8 +194,20 @@ def test_training_tables_are_added_without_changing_existing_user(
         existing_session = connection.execute(
             text("SELECT title, status FROM interview_sessions WHERE id = 1")
         ).one()
+        existing_run = connection.execute(
+            text("SELECT run_id, agent_name FROM agent_runs WHERE id = 1")
+        ).one()
+        connection.execute(
+            text(
+                "INSERT INTO agent_runs VALUES "
+                "(2, 'evaluation-run', 1, 1, 'evaluation', 'v2', "
+                "'success', 12, NULL, '2026-07-18T00:00:01')"
+            )
+        )
 
     assert existing_user.username == "existing-user"
     assert existing_user.password_hash == "existing-hash"
     assert existing_session.title == "existing session"
     assert existing_session.status == "draft"
+    assert existing_run.run_id == "existing-run"
+    assert existing_run.agent_name == "supervisor"

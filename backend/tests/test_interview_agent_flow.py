@@ -34,6 +34,25 @@ class FakeInterviewLLM:
             return f'{{"action":"{action}","reason":"test decision"}}'
         if "Evidence Agent" in system_message:
             return '{"query":"project ownership architecture troubleshooting"}'
+        if "Evaluation Agent" in system_message:
+            source_ids = (
+                '["project-file"]'
+                if '"is_sufficient":true' in user_message
+                else "[]"
+            )
+            return (
+                '{"technical_accuracy_score":80,'
+                '"evidence_consistency_score":75,'
+                '"answer_depth_score":70,'
+                '"expression_structure_score":85,'
+                '"job_match_score":65,'
+                '"evaluation_summary":"Solid answer with room for detail",'
+                '"problems":[],"optimized_answer":"Detailed answer",'
+                '"modification_reason":"Use a clearer structure",'
+                '"has_evidence_conflict":false,"evidence_conflicts":[],'
+                f'"evidence_source_ids":{source_ids},'
+                '"unsupported_claims":[],"strengths":["Clear structure"]}'
+            )
         if "Interviewer Agent" in system_message:
             self.interviewer_calls += 1
             if (

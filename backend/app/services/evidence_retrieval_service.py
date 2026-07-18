@@ -129,6 +129,7 @@ def retrieve_interview_evidence(
             continue
         metadata = chunk.get("metadata") or {}
         file_id = str(metadata.get("file_id") or "")
+        chunk_index = metadata.get("chunk_index")
         category = metadata.get("category") or file_categories.get(file_id, "other")
         if category == "project" and selected_projects and file_id not in selected_projects:
             continue
@@ -136,8 +137,13 @@ def retrieve_interview_evidence(
             continue
         item = EvidenceItem(
             evidence_type=category,
-            source_id=file_id,
+            source_id=(
+                f"{file_id}:{chunk_index}"
+                if chunk_index is not None
+                else file_id
+            ),
             filename=metadata.get("filename"),
+            chunk_index=chunk_index,
             content=str(chunk.get("content") or "")[:2000],
             distance=float(distance),
         )

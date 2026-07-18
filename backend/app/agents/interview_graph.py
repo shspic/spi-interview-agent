@@ -6,20 +6,25 @@ from langgraph.graph import END, START, StateGraph
 from sqlalchemy.orm import Session
 
 from app.agents.evidence_agent import EvidenceAgent
+from app.agents.evaluation_agent import EvaluationAgent
 from app.agents.interviewer_agent import InterviewerAgent
 from app.agents.schemas import (
     EvidenceOutput,
     EvidenceQueryInput,
+    EvaluationInput,
+    EvaluationOutput,
     InterviewerInput,
     InterviewerOutput,
     InterviewPlanInput,
     InterviewPlanOutput,
     SupervisorDecisionInput,
     SupervisorDecisionOutput,
+    SupervisorEvaluationSummary,
 )
 from app.agents.supervisor_agent import SupervisorAgent
 from app.db.models import AgentRun
 from app.services.interview_session_service import now_iso
+from app.services.evaluation_service import persist_turn_evaluation
 
 
 class InterviewGraphState(TypedDict, total=False):
@@ -33,9 +38,11 @@ class InterviewGraphState(TypedDict, total=False):
     plan: InterviewPlanOutput
     current_main_question: int
     current_follow_up_count: int
+    current_turn_id: int
     current_question: str
     latest_answer: str
     evidence: EvidenceOutput
+    evaluation: EvaluationOutput
     decision: SupervisorDecisionOutput
     generated_question: InterviewerOutput
 
@@ -48,6 +55,7 @@ class InterviewAgentRuntime:
         session_id: int,
         supervisor: SupervisorAgent | None = None,
         evidence: EvidenceAgent | None = None,
+        evaluation: EvaluationAgent | None = None,
         interviewer: InterviewerAgent | None = None,
     ):
         self.db = db
@@ -56,6 +64,7 @@ class InterviewAgentRuntime:
         self.run_id = str(uuid4())
         self.supervisor = supervisor or SupervisorAgent()
         self.evidence = evidence or EvidenceAgent()
+        self.evaluation = evaluation or EvaluationAgent()
         self.interviewer = interviewer or InterviewerAgent()
 
     def execute(self, agent, callback):
@@ -169,6 +178,7 @@ def build_interview_graph(runtime: InterviewAgentRuntime):
         return {"evidence": evidence}
 
     def supervisor_decision_node(state: InterviewGraphState) -> dict:
+        evaluation = state["evaluation"]
         payload = SupervisorDecisionInput(
             mode=state["mode"],
             planned_main_questions=state["planned_main_questions"],
@@ -177,12 +187,39 @@ def build_interview_graph(runtime: InterviewAgentRuntime):
             question=state["current_question"],
             answer=state["latest_answer"],
             evidence=state["evidence"],
+            evaluation=SupervisorEvaluationSummary(
+                technical_accuracy_score=evaluation.technical_accuracy_score,
+                evidence_consistency_score=evaluation.evidence_consistency_score,
+                answer_depth_score=evaluation.answer_depth_score,
+                has_evidence_conflict=evaluation.has_evidence_conflict,
+                evaluation_summary=evaluation.evaluation_summary,
+            ),
         )
         decision = runtime.execute(
             runtime.supervisor,
             lambda: runtime.supervisor.decide(payload),
         )
         return {"decision": decision}
+
+    def evaluation_node(state: InterviewGraphState) -> dict:
+        payload = EvaluationInput(
+            question=state["current_question"],
+            answer=state["latest_answer"],
+            evidence=state["evidence"],
+        )
+        evaluation = runtime.execute(
+            runtime.evaluation,
+            lambda: runtime.evaluation.evaluate(payload),
+        )
+        persisted = persist_turn_evaluation(
+            runtime.db,
+            runtime.user_id,
+            runtime.session_id,
+            state["current_turn_id"],
+            evaluation,
+            state["evidence"],
+        )
+        return {"evaluation": persisted}
 
     def interviewer_node(state: InterviewGraphState) -> dict:
         if state["operation"] == "start":
@@ -223,6 +260,7 @@ def build_interview_graph(runtime: InterviewAgentRuntime):
     builder = StateGraph(InterviewGraphState)
     builder.add_node("supervisor_plan", supervisor_plan_node)
     builder.add_node("evidence", evidence_node)
+    builder.add_node("evaluation", evaluation_node)
     builder.add_node("supervisor_decision", supervisor_decision_node)
     builder.add_node("interviewer", interviewer_node)
     builder.add_conditional_edges(
@@ -233,9 +271,20 @@ def build_interview_graph(runtime: InterviewAgentRuntime):
     builder.add_edge("supervisor_plan", "evidence")
     builder.add_conditional_edges(
         "evidence",
-        lambda state: state["operation"],
-        {"start": "interviewer", "answer": "supervisor_decision"},
+        lambda state: (
+            "start"
+            if state["operation"] == "start"
+            else "evaluated"
+            if state.get("evaluation") is not None
+            else "evaluate"
+        ),
+        {
+            "start": "interviewer",
+            "evaluate": "evaluation",
+            "evaluated": "supervisor_decision",
+        },
     )
+    builder.add_edge("evaluation", "supervisor_decision")
     builder.add_conditional_edges(
         "supervisor_decision",
         lambda state: (

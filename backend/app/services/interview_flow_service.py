@@ -9,6 +9,7 @@ from app.agents.interview_graph import (
     run_interview_graph,
 )
 from app.agents.schemas import (
+    EvaluationOutput,
     InterviewPlanOutput,
     SupervisorDecisionOutput,
 )
@@ -18,6 +19,10 @@ from app.services.interview_session_service import (
     create_interview_turn,
     get_owned_session,
     now_iso,
+)
+from app.services.evaluation_service import (
+    load_turn_evaluation,
+    summarize_completed_session,
 )
 
 
@@ -42,6 +47,7 @@ class InterviewAnswerResult:
     interview_session: InterviewSession
     answered_turn: InterviewTurn
     next_turn: InterviewTurn | None
+    evaluation: EvaluationOutput
     decision: SupervisorDecisionOutput
     evidence_limited: bool
     agent_execution_summary: dict
@@ -67,15 +73,17 @@ def _store_failed_summary(
     session_id: int,
     runtime: InterviewAgentRuntime,
     error: Exception,
-) -> None:
+) -> dict:
     db.rollback()
     interview_session = get_owned_session(db, user_id, session_id)
-    interview_session.agent_execution_summary = runtime.summary(
+    summary = runtime.summary(
         "error",
         error=type(error).__name__,
     )
+    interview_session.agent_execution_summary = summary
     interview_session.updated_at = now_iso()
     db.commit()
+    return summary
 
 
 def _build_success_summary(
@@ -92,6 +100,8 @@ def _build_success_summary(
         summary["evidence_limited"] = question.evidence_limited
     elif evidence is not None:
         summary["evidence_limited"] = not evidence.is_sufficient
+    if state.get("evaluation") is not None:
+        summary["evaluation_status"] = "completed"
     return summary
 
 
@@ -273,6 +283,7 @@ def answer_interview_turn(
             raise InterviewFlowError(409, "该题目已经回答")
 
     plan = _load_plan(interview_session)
+    existing_evaluation = load_turn_evaluation(current_turn)
     follow_up_count = (
         db.query(InterviewTurn)
         .filter(
@@ -294,19 +305,39 @@ def answer_interview_turn(
         "plan": plan,
         "current_main_question": current_turn.main_question_number,
         "current_follow_up_count": follow_up_count,
+        "current_turn_id": current_turn.id,
         "current_question": current_turn.question,
         "latest_answer": current_turn.user_answer,
     }
+    if existing_evaluation is not None:
+        initial_state["evaluation"] = existing_evaluation
     try:
         state = run_interview_graph(runtime, initial_state)
     except Exception as exc:
-        _store_failed_summary(db, user_id, session_id, runtime, exc)
+        failed_summary = _store_failed_summary(
+            db,
+            user_id,
+            session_id,
+            runtime,
+            exc,
+        )
+        failed_agent = (
+            failed_summary["agents"][-1]["agent_name"]
+            if failed_summary["agents"]
+            else None
+        )
+        detail = (
+            "回答评价失败，原回答已保存，可使用相同答案重试"
+            if failed_agent == "evaluation"
+            else "下一题生成失败，回答和已有评价已保存，可使用相同答案重试"
+        )
         raise InterviewFlowError(
             502,
-            "下一题生成失败，回答已保存，可使用相同答案重试",
+            detail,
         ) from exc
 
     decision = state["decision"]
+    evaluation = state["evaluation"]
     summary = _build_success_summary(runtime, state)
     interview_session = get_owned_session(db, user_id, session_id)
     if interview_session.status != "in_progress":
@@ -316,12 +347,14 @@ def answer_interview_turn(
         interview_session.completed_at = now_iso()
         interview_session.agent_execution_summary = summary
         interview_session.updated_at = interview_session.completed_at
+        summarize_completed_session(db, interview_session)
         db.commit()
         db.refresh(current_turn)
         return InterviewAnswerResult(
             interview_session=interview_session,
             answered_turn=current_turn,
             next_turn=None,
+            evaluation=evaluation,
             decision=decision,
             evidence_limited=not state["evidence"].is_sufficient,
             agent_execution_summary=summary,
@@ -364,6 +397,7 @@ def answer_interview_turn(
         interview_session=interview_session,
         answered_turn=current_turn,
         next_turn=next_turn,
+        evaluation=evaluation,
         decision=decision,
         evidence_limited=generated_question.evidence_limited,
         agent_execution_summary=summary,

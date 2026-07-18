@@ -121,7 +121,7 @@ class PreviousSessionSummary(BaseModel):
     id: int
     title: str
     mode: InterviewMode
-    overall_score: int | None
+    overall_score: float | None
     completed_at: str | None
 
 
@@ -142,12 +142,15 @@ class InterviewTurnResponse(BaseModel):
     job_match_score: int | None
     total_score: int | None
     evaluation_summary: str | None
-    problems: list[str] | None
+    problems: list[dict[str, Any] | str] | None
     optimized_answer: str | None
     modification_reason: str | None
     has_evidence_conflict: bool
     evidence_conflicts: list[dict[str, Any]] | None
     evidence_sources: list[dict[str, Any]] | None
+    evaluation_source_ids: list[str] | None
+    unsupported_claims: list[str] | None
+    strengths: list[str] | None
     answered_at: str | None
     created_at: str
     updated_at: str
@@ -175,7 +178,7 @@ class InterviewSessionResponse(BaseModel):
     planned_main_questions: int
     current_main_question: int
     selected_project_file_ids: list[str]
-    overall_score: int | None
+    overall_score: float | None
     dimension_scores: dict[str, float] | None
     summary: str | None
     started_at: str | None
@@ -210,6 +213,7 @@ class InterviewStartResponse(InterviewSessionResponse):
 
 class InterviewAnswerResponse(InterviewSessionResponse):
     decision: SupervisorDecisionOutput
+    answered_turn: InterviewTurnResponse
     current_question: InterviewTurnResponse | None
     completed_main_questions: int
     current_follow_up_count: int

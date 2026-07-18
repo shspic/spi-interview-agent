@@ -17,6 +17,7 @@ def invoke_structured(
     messages: list[dict],
     output_model: type[OutputModel],
     llm_call: Callable[[list[dict]], str] | None = None,
+    semantic_validator: Callable[[OutputModel], None] | None = None,
 ) -> OutputModel:
     call = llm_call or chat_with_messages
     schema = json.dumps(
@@ -37,8 +38,11 @@ def invoke_structured(
         try:
             raw_result = call(request_messages)
             parsed = json.loads(raw_result)
-            return output_model.model_validate(parsed)
-        except (json.JSONDecodeError, ValidationError, LLMServiceError) as exc:
+            result = output_model.model_validate(parsed)
+            if semantic_validator is not None:
+                semantic_validator(result)
+            return result
+        except (json.JSONDecodeError, ValidationError, LLMServiceError, ValueError) as exc:
             last_error = str(exc)
             if attempt == 0:
                 request_messages = [
