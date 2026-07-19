@@ -115,6 +115,8 @@ def analyze_job(
 
     if not chunks:
         raise JobServiceError("当前知识库为空或没有检索到相关内容，请先上传资料并重建知识库索引")
+    if search_result.get("sufficient") is not True:
+        raise JobServiceError("当前用户资料不足以完整支持岗位分析")
 
     context, sources = build_local_context_and_sources(chunks)
 

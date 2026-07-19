@@ -32,6 +32,8 @@ def ask_with_rag(question: str, user_id: int, db: Session) -> dict:
 
     if not chunks:
         raise ChatServiceError("当前知识库为空或没有检索到相关内容，请先上传文件并重建知识库索引")
+    if search_result.get("sufficient") is not True:
+        raise ChatServiceError("当前资料只能覆盖问题的一部分，无法形成有充分证据支持的完整回答")
 
     context_parts = []
     sources = []

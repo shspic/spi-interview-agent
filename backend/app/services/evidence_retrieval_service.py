@@ -7,12 +7,19 @@ from app.agents.schemas import EvidenceItem, EvidenceOutput
 from app.core.config import settings
 from app.db.models import FileRecord, InterviewSession, TargetJob, UserProfile
 from app.services.retrieval_confidence import decide_retrieval_evidence
+from app.services.retrieval_query_analysis import analyze_query
 from app.services.vector_store import DISTANCE_METRIC, search_evidence_candidates
 
 
 # 保留既有测试与调用注入点；实际实现已切换为证据候选检索。
 def search_candidate_chunks(query: str, user_id: int, candidate_k: int):
-    return search_evidence_candidates(query, user_id, candidate_k)
+    analysis = analyze_query(query)
+    return search_evidence_candidates(
+        query,
+        user_id,
+        candidate_k,
+        query_variants=analysis.query_variants,
+    )
 
 
 logger = logging.getLogger(__name__)
@@ -232,6 +239,13 @@ def retrieve_interview_evidence(
             }
         )
 
+    analysis = analyze_query(
+        query,
+        trusted_file_names={
+            file_id: record.filename
+            for file_id, record in records_by_id.items()
+        },
+    )
     decision = decide_retrieval_evidence(
         query,
         trusted_chunks,
@@ -242,6 +256,8 @@ def retrieve_interview_evidence(
             for file_id, record in records_by_id.items()
         },
         allowed_categories={"project", "resume"},
+        analysis=analysis,
+        use_evidence_set=True,
     )
     ranked_chunks = decision.accepted_candidates
     logger.info(

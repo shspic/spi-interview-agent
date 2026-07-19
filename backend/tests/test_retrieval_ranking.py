@@ -347,3 +347,54 @@ def test_evidence_candidate_pool_does_not_expand_empty_or_short_results(monkeypa
 
     assert len(collection.calls) == 1
     assert result["retrieval_stats"]["chroma_query_count"] == 1
+
+
+def test_multi_query_evidence_search_is_bounded_to_three_chroma_queries(monkeypatch):
+    collection = _Collection(
+        [_chunk(f"证据 {index}", 0.2 + index / 100, f"file-{index}") for index in range(12)]
+    )
+    monkeypatch.setattr(vector_store, "get_collection", lambda: collection)
+    monkeypatch.setattr(vector_store, "get_embedding_model", lambda: _EmbeddingModel())
+
+    result = vector_store.search_evidence_candidates(
+        "原始问题",
+        1,
+        top_k=3,
+        query_variants=("项目 属性", "技术 证据"),
+    )
+
+    assert len(collection.calls) == 3
+    assert result["retrieval_stats"]["chroma_query_count"] == 3
+    assert result["retrieval_stats"]["query_variant_count"] == 2
+    assert len(result["chunks"]) <= vector_store.settings.retrieval_max_candidates
+
+
+def test_multi_query_evidence_search_rejects_too_many_variants(monkeypatch):
+    collection = _Collection([])
+    monkeypatch.setattr(vector_store, "get_collection", lambda: collection)
+    monkeypatch.setattr(vector_store, "get_embedding_model", lambda: _EmbeddingModel())
+
+    with pytest.raises(ValueError, match="变体数量超过上限"):
+        vector_store.search_evidence_candidates(
+            "原始问题",
+            1,
+            top_k=3,
+            query_variants=("变体 一", "变体 二", "变体 三"),
+        )
+    assert collection.calls == []
+
+
+def test_empty_knowledge_result_does_not_run_query_variants(monkeypatch):
+    collection = _Collection([])
+    monkeypatch.setattr(vector_store, "get_collection", lambda: collection)
+    monkeypatch.setattr(vector_store, "get_embedding_model", lambda: _EmbeddingModel())
+
+    result = vector_store.search_evidence_candidates(
+        "原始问题",
+        1,
+        top_k=3,
+        query_variants=("项目 属性", "技术 证据"),
+    )
+
+    assert len(collection.calls) == 1
+    assert result["retrieval_stats"]["chroma_query_count"] == 1

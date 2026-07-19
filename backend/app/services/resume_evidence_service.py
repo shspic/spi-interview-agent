@@ -157,6 +157,8 @@ def retrieve_resume_evidence(
         )
 
     best_distance = min(distances) if distances else None
+    # 此处 query 是广泛收集素材的内部检索串，不是要求逐 facet 完整回答的用户问题。
+    # 候选仍经过集合选择与事实校验；只要存在当前用户项目证据即可进入 Resume 的受控生成。
     is_sufficient = bool(project_evidence)
     if is_sufficient:
         reason = "存在距离阈值内或面试时已确认的当前用户项目证据"

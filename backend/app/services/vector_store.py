@@ -1,4 +1,5 @@
 from pathlib import Path
+from time import perf_counter
 from typing import Any
 
 import chromadb
@@ -13,10 +14,13 @@ from app.services.retrieval_confidence import (
     ADAPTIVE_EXPANSION_DISTANCE,
     HARD_REJECT_DISTANCE,
 )
+from app.services.retrieval_query_analysis import MAX_QUERY_VARIANTS, MAX_SEMANTIC_QUERIES
 from app.services.text_splitter import split_text
 
 COLLECTION_NAME = "personal_knowledge_base"
 DISTANCE_METRIC = "l2_squared"
+RRF_K = 60
+FUSION_STRATEGIES = {"minimum_distance", "rrf"}
 
 _embedding_model: SentenceTransformer | None = None
 _chroma_client: Any | None = None
@@ -277,10 +281,146 @@ def search_similar_chunks(
     }
 
 
+def _candidate_source_key(chunk: dict) -> str:
+    metadata = chunk.get("metadata") or {}
+    file_id = str(metadata.get("file_id") or "")
+    chunk_index = metadata.get("chunk_index")
+    return f"{file_id}:{chunk_index}" if chunk_index is not None else file_id
+
+
+def fuse_candidate_routes(
+    route_chunks: list[list[dict]],
+    *,
+    strategy: str,
+    max_candidates: int,
+) -> tuple[list[dict], dict[str, Any]]:
+    if strategy not in FUSION_STRATEGIES:
+        raise ValueError("未知候选融合方案")
+    if max_candidates <= 0:
+        raise ValueError("max_candidates 必须大于 0")
+    started = perf_counter()
+    fused: dict[str, dict[str, Any]] = {}
+    raw_candidate_count = 0
+    for route_index, chunks in enumerate(route_chunks):
+        for rank, chunk in enumerate(chunks, start=1):
+            raw_candidate_count += 1
+            source_key = _candidate_source_key(chunk)
+            if not source_key:
+                continue
+            distance = chunk.get("distance")
+            if not isinstance(distance, (int, float)) or isinstance(distance, bool):
+                continue
+            row = fused.setdefault(
+                source_key,
+                {
+                    "chunk": dict(chunk),
+                    "best_distance": float(distance),
+                    "best_rank": rank,
+                    "rrf_score": 0.0,
+                    "route_hits": [],
+                },
+            )
+            if float(distance) < row["best_distance"]:
+                row["best_distance"] = float(distance)
+                row["chunk"] = dict(chunk)
+            row["best_rank"] = min(row["best_rank"], rank)
+            row["rrf_score"] += 1.0 / (RRF_K + rank)
+            row["route_hits"].append((route_index, rank))
+
+    rows = list(fused.items())
+    if strategy == "minimum_distance":
+        rows.sort(
+            key=lambda item: (
+                item[1]["best_distance"],
+                item[1]["best_rank"],
+                item[0],
+            )
+        )
+    else:
+        rows.sort(
+            key=lambda item: (
+                -item[1]["rrf_score"],
+                item[1]["best_distance"],
+                item[1]["best_rank"],
+                item[0],
+            )
+        )
+
+    selected = []
+    for _source_key, row in rows[:max_candidates]:
+        chunk = row["chunk"]
+        chunk["distance"] = row["best_distance"]
+        chunk["_fusion_score"] = round(row["rrf_score"], 9)
+        chunk["_route_hit_count"] = len(row["route_hits"])
+        selected.append(chunk)
+    return selected, {
+        "fusion_strategy": strategy,
+        "rrf_k": RRF_K if strategy == "rrf" else None,
+        "raw_route_candidate_count": raw_candidate_count,
+        "merged_candidate_count": len(fused),
+        "fused_candidate_count": len(selected),
+        "fusion_latency_ms": round((perf_counter() - started) * 1000, 6),
+    }
+
+
+def search_multi_query_candidates(
+    queries: list[str],
+    user_id: int,
+    candidate_k: int,
+    *,
+    fusion_strategy: str = "rrf",
+) -> dict[str, Any]:
+    stable_queries = []
+    normalized_queries = set()
+    for query in queries:
+        normalized = " ".join(str(query).split()).casefold()
+        if not normalized or normalized in normalized_queries:
+            continue
+        normalized_queries.add(normalized)
+        stable_queries.append(str(query).strip())
+    if not stable_queries:
+        raise ValueError("query 不能为空")
+    if len(stable_queries) > MAX_SEMANTIC_QUERIES:
+        raise ValueError("语义检索 query 数量超过上限")
+
+    route_results = []
+    metadata_filtered_count = 0
+    for route_index, query in enumerate(stable_queries):
+        result = search_candidate_chunks(query, user_id, candidate_k)
+        chunks = result.get("chunks", []) or []
+        route_results.append(chunks)
+        metadata_filtered_count += int(
+            result.get("retrieval_stats", {}).get("metadata_filtered_count", 0)
+        )
+        if route_index == 0 and not chunks:
+            break
+    fused, fusion_stats = fuse_candidate_routes(
+        route_results,
+        strategy=fusion_strategy,
+        max_candidates=settings.retrieval_max_candidates,
+    )
+    return {
+        "candidate_k": candidate_k,
+        "distance_metric": DISTANCE_METRIC,
+        "chunks": fused,
+        "retrieval_stats": {
+            **fusion_stats,
+            "candidate_pool_size": sum(len(items) for items in route_results),
+            "metadata_filtered_count": metadata_filtered_count,
+            "chroma_query_count": len(route_results),
+            "query_variant_count": max(0, len(route_results) - 1),
+            "max_semantic_queries": MAX_SEMANTIC_QUERIES,
+        },
+    }
+
+
 def search_evidence_candidates(
     query: str,
     user_id: int,
     top_k: int,
+    *,
+    query_variants: tuple[str, ...] | list[str] | None = None,
+    fusion_strategy: str = "rrf",
 ) -> dict[str, Any]:
     """为证据检索最多执行一次受控扩展，不负责证据充分性判断。"""
     initial_k = candidate_pool_size(
@@ -288,6 +428,29 @@ def search_evidence_candidates(
         settings.retrieval_candidate_multiplier,
         settings.retrieval_max_candidates,
     )
+    variants = tuple(query_variants or ())
+    if len(variants) > MAX_QUERY_VARIANTS:
+        raise ValueError("query 变体数量超过上限")
+    if variants:
+        result = search_multi_query_candidates(
+            [query, *variants],
+            user_id,
+            initial_k,
+            fusion_strategy=fusion_strategy,
+        )
+        return {
+            "query": query,
+            "top_k": top_k,
+            "candidate_k": initial_k,
+            "distance_metric": DISTANCE_METRIC,
+            "chunks": result.get("chunks", []) or [],
+            "retrieval_stats": {
+                **result.get("retrieval_stats", {}),
+                "initial_candidate_k": initial_k,
+                "adaptive_expanded": False,
+            },
+        }
+
     initial = search_candidate_chunks(query, user_id, initial_k)
     chunks = initial.get("chunks", []) or []
     expanded = False

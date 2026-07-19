@@ -227,7 +227,11 @@ def retrieve_local_node(state: AgentState) -> dict:
     except Exception as exc:
         raise AgentServiceError(f"本地知识库检索失败：{exc}") from exc
 
-    chunks = search_result.get("chunks", []) or []
+    chunks = (
+        search_result.get("chunks", []) or []
+        if search_result.get("sufficient") is True
+        else []
+    )
     local_context, local_sources = _build_local_context_and_sources(chunks)
 
     return {

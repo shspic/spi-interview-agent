@@ -392,6 +392,13 @@ cd D:\spir\NO1_agent\backend
 # 独立 validation；final holdout 仅在生产文件哈希冻结后运行
 .venv\Scripts\python.exe -m evals.run_retrieval_calibration --real-embedding --dataset validation
 .venv\Scripts\python.exe -m evals.run_retrieval_calibration --real-embedding --dataset holdout --final-holdout
+.venv\Scripts\python.exe -m evals.run_retrieval_coverage --check-datasets
+.venv\Scripts\python.exe -m evals.run_retrieval_coverage --real-embedding --dataset development
+.venv\Scripts\python.exe -m evals.run_retrieval_coverage --real-embedding --dataset validation
+# 仅在生产冻结校验通过后正式运行一次
+.venv\Scripts\python.exe -m evals.run_retrieval_coverage --real-embedding --dataset holdout --final-holdout
 ```
 
 每次运行的 JSON、case 明细和 Markdown 报告位于 `backend/evals/results/<运行时间>/`，详细指标、门槛和首次结果参见 [自动化评估基线](docs/EVALUATION_BASELINE.md)，证据所有权与 Prompt Injection 防护参见 [Agent 安全边界](docs/AGENT_SECURITY.md)，候选池与确定性重排参见 [检索候选与排序](docs/RETRIEVAL_RANKING.md)，真实 BGE/Chroma 的隔离测量参见 [真实 Embedding 检索校准](docs/RETRIEVAL_CALIBRATION.md)，排序与证据接受、validation/holdout 纪律参见 [检索证据充分性](docs/RETRIEVAL_CONFIDENCE.md)。
+
+生产 Evidence 检索现已支持确定性 Query Analysis、最多两个查询变体和三次 Chroma 查询、RRF 候选融合、可信文件身份辅助、互补证据集合选择及集合级 `sufficient`。`/knowledge/search` 仍保持近似搜索展示语义。coverage final holdout 的方案 D Recall@3 为 81.48%、MRR 89.81%，安全指标为 0，但完整目标评估未通过；设计和完整失败项见 [检索查询分析与证据集合](docs/RETRIEVAL_EVIDENCE_SETS.md)。

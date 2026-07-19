@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "frozen_at": "2026-07-20T03:43:04.3573371+08:00",
+  "git_commit": "7e4b128a7633010ffc32b2672facbdd717f94766",
+  "selected_strategy": "D",
+  "final_holdout_frozen": true,
+  "formal_run_completed": true,
+  "formal_run_completed_at": "2026-07-20T03:45:48.941711+08:00",
+  "network_disabled": true,
+  "dataset_manifest_sha256": "b62a1b368891baa76fe31009a5bd822a9c9f6f7e7c3fa601a360791d7f168511",
+  "configuration_snapshot": {
+    "model_id": "BAAI/bge-small-zh-v1.5",
+    "embedding_dimension": 512,
+    "normalized_embeddings": true,
+    "distance_metric": "l2_squared",
+    "evidence_max_distance": 0.8,
+    "hard_reject_distance": 1.15,
+    "candidate_multiplier": 3,
+    "max_candidates": 40,
+    "max_query_variants": 2,
+    "max_semantic_queries": 3,
+    "rrf_k": 60,
+    "semantic_weight": 0.7,
+    "lexical_weight": 0.3,
+    "near_duplicate_penalty": 0.12
+  },
+  "production_files": [
+    {"path": "app/services/retrieval_query_analysis.py", "sha256": "e4f03a5b5383330c828418c3d6e7c7aeee70273f7662028e39a333896250302e"},
+    {"path": "app/services/evidence_set_selector.py", "sha256": "750b34906e044e8dd00685f0f740679411d1a95598930b4367eab08bdc948bc4"},
+    {"path": "app/services/retrieval_confidence.py", "sha256": "eeb54ee816209474051d5acae92a7d5c2d608c108639677fe1bada63ef3bc75b"},
+    {"path": "app/services/trusted_retrieval_service.py", "sha256": "8e87b0c6c1228c78888fa53e889dc1aaed2425b2de242bc239d52bee8d1d65b0"},
+    {"path": "app/services/vector_store.py", "sha256": "c8d36f5ca1ed7d3b5d949e85791fb4058971b0a219b69f8f77c2103043791683"},
+    {"path": "app/services/evidence_retrieval_service.py", "sha256": "e7c5a482fba110336e3faf022766b0a21789a7c07049cfce1d34e28ff934a0ec"},
+    {"path": "app/services/resume_evidence_service.py", "sha256": "9d00fc44265a8df2241650e9f35fa70994f56712a42ef7caf6344b4d93128b3f"},
+    {"path": "app/services/agent_service.py", "sha256": "31885af8af986124fad962811461bc4b30e552f36a9e5ccda0fe5ed5244112c9"},
+    {"path": "app/services/chat_service.py", "sha256": "7204f9ded43db3177ee87bdd2d567bc2d8d82c9b4dd85eaf78f59f7c02db70bf"},
+    {"path": "app/services/interview_service.py", "sha256": "98d521fd4723ed5c782915cab837ab7170ad401f4e9155de74e3e879c15812b4"},
+    {"path": "app/services/job_service.py", "sha256": "074111822e34095c42467a1fd62d304cb509afe9110715a82eebbaaff8bb4263"}
+  ]
+}

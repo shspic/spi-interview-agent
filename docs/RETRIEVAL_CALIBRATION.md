@@ -140,3 +140,7 @@ cd D:\spir\NO1_agent\backend
 final holdout 只有在 `retrieval_production_freeze.json` 中的生产文件与数据 manifest 哈希全部匹配时才能运行，并生成 `final-holdout-marker.json`。最终置信度加受控扩展方案在 validation 的 Recall@1/3/5 为 60.19%/84.26%/89.81%，Precision@3 为 28.00%，MRR 为 84.72%，无答案准确率为 100%，FR/FA 为 15.38%/8.00%。
 
 冻结后的 final holdout 为 60.19%/70.37%/75.00%，Precision@3 22.67%，MRR 79.63%，无答案准确率 85.71%，FR/FA 26.92%/6.00%。泄露、非法 source 和排序不稳定均为 0。该结果未达到全部目标，且未用于再次调参。充分性设计、调用方策略和失败分析见 [检索证据充分性](RETRIEVAL_CONFIDENCE.md)。
+
+## Coverage 独立集合结果
+
+后续阶段没有复用上述集合调参，而是新建 coverage development 30/50、validation 25/45 和 final holdout 25/45 三套 query/chunk 数据，并在修改生产算法前冻结 validation 与 holdout。最终选择确定性 query facets、最多三路 BGE 查询、RRF 与证据集合选择。validation 的 Recall@3/MRR/Facet@3/Complete 为 78.70%/88.89%/90.62%/85.71%；正式 final holdout 为 81.48%/89.81%/83.87%/69.23%。final 的跨用户泄露、非法 source、排序不稳定和未捕获异常均为 0，但总体目标未通过，结果没有被用于再次调参。详见 [检索查询分析与证据集合](RETRIEVAL_EVIDENCE_SETS.md)。

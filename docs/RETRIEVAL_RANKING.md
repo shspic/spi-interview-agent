@@ -84,3 +84,9 @@ candidate_k = min(RETRIEVAL_MAX_CANDIDATES,
 当前 70/30 重排与 0.12 多样性惩罚保持不变；Agent 调用方在排序后增加独立的确定性充分性判断。`EVIDENCE_MAX_DISTANCE=0.8` 保留为高置信参考，平方 L2 `1.15` 是 Agent 证据硬拒绝边界。候选池上限由 20 调整为 40，但只在初次候选填满且边界开放时最多扩展一次，普通搜索展示接口不使用证据接受策略。
 
 validation 支持选择“置信度 + 受控扩展”：Recall@3 84.26%、无答案 100%、FR 15.38%、FA 8.00%。final holdout 的 Recall@3 只有 70.37%、无答案 85.71%、FR 26.92%、FA 6.00%，说明方案改善拒答但多证据泛化仍不足。本阶段在 holdout 后不再修改参数。详见 [检索证据充分性](RETRIEVAL_CONFIDENCE.md)。
+
+## 从候选排序到证据集合
+
+新的生产链路没有替换既有 70/30 重排，而是在其前后增加最多三个确定性语义 query、`k=60` 的 RRF 融合和集合选择。单条结果仍按距离、词项、所有权、category、去重和稳定 tie-breaker 排序；最终 `top_k` 改为在相关性合格的候选中优先补齐未覆盖 facet、独立来源和可信项目一致性。总候选上限 40，FileRecord 仍为每请求一次批量查询。
+
+coverage final holdout 中方案 A 到 D 的 Recall@3 从 72.22% 提升到 81.48%，MRR 从 77.31% 提升到 89.81%，Complete Evidence 从 53.85% 提升到 69.23%；D 改善 6 个 case、退化 2 个。新增复杂度没有隐藏退化或未达标指标，详见 [检索查询分析与证据集合](RETRIEVAL_EVIDENCE_SETS.md)。

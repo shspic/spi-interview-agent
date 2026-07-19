@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.db.models import FileRecord
 from app.services.retrieval_confidence import decide_retrieval_evidence
+from app.services.retrieval_query_analysis import analyze_query
 from app.services.vector_store import DISTANCE_METRIC, search_evidence_candidates
 
 
@@ -20,30 +21,40 @@ def search_trusted_evidence(
     top_k: int,
 ) -> dict[str, Any]:
     """检索并接受可进入 Agent Prompt 的当前用户事实证据。"""
-    candidate_result = search_evidence_candidates(query, user_id, top_k)
-    candidates = candidate_result.get("chunks", []) or []
-    file_ids = sorted(
-        {
-            metadata["file_id"]
-            for chunk in candidates
-            if isinstance((metadata := chunk.get("metadata")), dict)
-            and metadata.get("user_id") == user_id
-            and isinstance(metadata.get("file_id"), str)
-            and metadata["file_id"].strip()
-            and len(metadata["file_id"]) <= 255
-        }
-    )
     records = (
         db.query(FileRecord)
-        .filter(
-            FileRecord.user_id == user_id,
-            FileRecord.file_id.in_(file_ids),
-        )
+        .filter(FileRecord.user_id == user_id)
         .all()
-        if file_ids
-        else []
     )
     records_by_id = {record.file_id: record for record in records}
+    trusted_file_names = {
+        file_id: record.filename for file_id, record in records_by_id.items()
+    }
+    analysis = analyze_query(query, trusted_file_names=trusted_file_names)
+    if not records:
+        return {
+            "query": query,
+            "top_k": top_k,
+            "distance_metric": DISTANCE_METRIC,
+            "chunks": [],
+            "sufficient": False,
+            "partial": False,
+            "confidence": 0.0,
+            "decision_reason": "rejected_empty_knowledge_base",
+            "retrieval_stats": {
+                "chroma_query_count": 0,
+                "query_variant_count": 0,
+                "file_record_batch_query_count": 1,
+            },
+        }
+    candidate_result = search_evidence_candidates(
+        query,
+        user_id,
+        top_k,
+        query_variants=analysis.query_variants,
+        fusion_strategy="rrf",
+    )
+    candidates = candidate_result.get("chunks", []) or []
     trusted_chunks = []
     ownership_filtered = 0
     category_filtered = 0
@@ -85,10 +96,10 @@ def search_trusted_evidence(
         trusted_chunks,
         top_k=top_k,
         high_confidence_distance=settings.evidence_max_distance,
-        trusted_file_names={
-            file_id: record.filename for file_id, record in records_by_id.items()
-        },
+        trusted_file_names=trusted_file_names,
         allowed_categories={"project", "resume"},
+        analysis=analysis,
+        use_evidence_set=True,
     )
     logger.info(
         "trusted_retrieval_decision user_id=%s sufficient=%s reason=%s "
@@ -105,6 +116,7 @@ def search_trusted_evidence(
         "distance_metric": DISTANCE_METRIC,
         "chunks": decision.accepted_candidates,
         "sufficient": decision.sufficient,
+        "partial": decision.partial,
         "confidence": decision.confidence,
         "decision_reason": decision.decision_reason,
         "retrieval_stats": {
@@ -112,6 +124,20 @@ def search_trusted_evidence(
             **decision.filtered_counts,
             "ownership_filtered_count": ownership_filtered,
             "trusted_category_filtered_count": category_filtered,
-            "file_record_batch_query_count": int(bool(file_ids)),
+            "file_record_batch_query_count": 1,
+            "query_intent": analysis.intent,
+            "required_facet_count": len(analysis.required_facets),
+            "covered_facet_count": len(
+                decision.evidence_set_stats["covered_facets"]
+            ),
+            "missing_facet_count": len(
+                decision.evidence_set_stats["missing_facets"]
+            ),
+            "independent_source_count": decision.evidence_set_stats[
+                "independent_source_count"
+            ],
+            "project_consistency": decision.evidence_set_stats[
+                "project_consistency"
+            ],
         },
     }

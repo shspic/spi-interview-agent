@@ -143,3 +143,11 @@ Evaluation 和 Resume 采用三层防护：Prompt 明确声明输入为不受信
 真实 BGE 数据严格分为 development、validation 和 final holdout。最终方案在 validation 的 Recall@1/3/5 为 60.19%/84.26%/89.81%，Precision@3 28.00%，MRR 84.72%，无答案 100%，FR/FA 15.38%/8.00%。冻结后的 final holdout 为 60.19%/70.37%/75.00%，Precision@3 22.67%，MRR 79.63%，无答案 85.71%，FR/FA 26.92%/6.00%。
 
 final holdout 没有达到 Recall@3、Precision@3、MRR 和 false reject 目标；结果保持失败状态，没有修改 fixture、期望或生产参数继续调优。完整方案与限制见 [检索证据充分性](RETRIEVAL_CONFIDENCE.md)。
+
+## Coverage 证据集合评估
+
+历史结果继续保留：54/59、68/69、Mock 81/81、首次真实校准以及检索可靠性 development/validation/final holdout。本阶段另建 coverage development 30 query/50 chunk、validation 25/45、final holdout 25/45；三个集合共 80 个唯一 query、137 个唯一 chunk，均为虚构数据并由 SHA-256 manifest 冻结。
+
+方案 D 在 development、validation、final 的 Recall@3 分别为 79.71%、78.70%、81.48%，MRR 为 88.77%、88.89%、89.81%，Facet@3 为 92.68%、90.62%、83.87%，Complete Evidence 为 82.35%、85.71%、69.23%。final 的 raw/normalized Precision@3 为 46.30%/81.48%，无答案 87.50%，FR/FA 18.18%/12.50%，Partial-as-Complete 60%，Project 75%，Explicit Negative 100%，Unknown-vs-Negative 87.50%，冗余 0。泄露、非法 source、排序不稳定和未捕获异常均为 0；总体目标失败，未围绕 final 再调参。
+
+完整 A～D 比较、查询成本与集合级指标见 [检索查询分析与证据集合](RETRIEVAL_EVIDENCE_SETS.md)。

@@ -73,3 +73,9 @@ final holdout 达到了无答案准确率和 false accept 目标，但 Recall@3�
 - BGE 的相关/无关距离存在明显重叠，确定性规则无法完全消除；
 - 自适应扩展减少了候选截断，但没有证明能稳定提升最终 Recall；
 - 下一阶段需要全新的独立集合验证多跳、多证据和属性缺失问题，不能复用 final holdout 调参。
+
+## Coverage 证据集合阶段
+
+全新 coverage development、validation 和 final holdout 已用于验证从单候选置信度到集合级充分性的升级。生产链路保留 `0.8` 高置信参考、`1.15` 硬拒绝、70/30 单候选权重与 0.12 多样性惩罚，同时增加确定性 query facets、最多三路召回、RRF 和 Evidence Set Selector。多部分或多跳 query 缺少必要 facet 时现在保持 `sufficient=false`；明确否定必须有正文否定证据，未说明保持 unknown。
+
+正式 final holdout 的方案 D 为 Recall@1/3/5 53.70%/81.48%/86.11%，raw/normalized Precision@3 46.30%/81.48%，MRR 89.81%，无答案 87.50%，FR/FA 18.18%/12.50%，Facet@3 83.87%，Complete Evidence 69.23%。安全指标和冗余率均为 0，但总体 `target_assessment.passed=false`；正式运行后未继续修改生产逻辑或数据。完整设计、A～D 比较和未达标项见 [检索查询分析与证据集合](RETRIEVAL_EVIDENCE_SETS.md)。

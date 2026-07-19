@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "created_at": "2026-07-20T02:45:14.8370319+08:00",
+  "git_commit_before_production_changes": "7e4b128a7633010ffc32b2672facbdd717f94766",
+  "network_disabled": true,
+  "datasets": {
+    "coverage_development": {
+      "path": "coverage_development_cases.json",
+      "sha256": "cb2e4baf5f29e9658c9dac2c0740010173f3bd556b64f58c016f274559785c9b",
+      "query_count": 30,
+      "chunk_count": 50,
+      "user_count": 3,
+      "frozen_before_production_changes": true,
+      "allowed_for_development": true
+    },
+    "coverage_validation": {
+      "path": "coverage_validation_cases.json",
+      "sha256": "abded30dccb7332577c4bc30066b752a5575f4a36e0f36020fb65a41c42a9263",
+      "query_count": 25,
+      "chunk_count": 45,
+      "user_count": 3,
+      "frozen_before_production_changes": true,
+      "allowed_for_solution_comparison": true
+    },
+    "coverage_final_holdout": {
+      "path": "coverage_final_holdout_cases.json",
+      "sha256": "12ed8f6b004c47e71dd5c0c2661181067ea260a9b073b74f213e0349208d3185",
+      "query_count": 25,
+      "chunk_count": 45,
+      "user_count": 3,
+      "frozen_before_production_changes": true,
+      "allowed_for_tuning": false,
+      "formal_run_completed": false
+    }
+  }
+}

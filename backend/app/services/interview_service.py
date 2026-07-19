@@ -37,6 +37,8 @@ def _build_context_and_sources(
 
     if not chunks:
         raise InterviewServiceError("当前知识库为空或没有检索到相关内容，请先上传资料并重建知识库索引")
+    if search_result.get("sufficient") is not True:
+        raise InterviewServiceError("当前资料不足以完整支持本次面试问题")
 
     context_parts = []
     sources = []
