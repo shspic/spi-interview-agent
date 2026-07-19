@@ -167,6 +167,8 @@ def test_training_tables_are_added_without_changing_existing_user(
         "registration_settings",
         "admin_audit_logs",
         "user_data_deletion_logs",
+        "rate_limit_buckets",
+        "upload_reservations",
     }.issubset(set(inspector.get_table_names()))
     session_columns = {
         column["name"] for column in inspector.get_columns("interview_sessions")
@@ -201,6 +203,18 @@ def test_training_tables_are_added_without_changing_existing_user(
     assert "ix_improvement_tasks_user_status" in task_indexes
     assert "ux_improvement_tasks_session_dedupe" in task_indexes
     assert {"completion_criteria", "dedupe_key"}.issubset(task_columns)
+    file_columns = {
+        column["name"] for column in inspector.get_columns("files")
+    }
+    assert {
+        "size_bytes",
+        "content_sha256",
+        "upload_idempotency_key_hash",
+    }.issubset(file_columns)
+    agent_run_columns = {
+        column["name"] for column in inspector.get_columns("agent_runs")
+    }
+    assert "request_id" in agent_run_columns
     description_foreign_keys = inspector.get_foreign_keys(
         "resume_project_descriptions"
     )
@@ -226,21 +240,27 @@ def test_training_tables_are_added_without_changing_existing_user(
         ).one()
         connection.execute(
             text(
-                "INSERT INTO agent_runs VALUES "
+                "INSERT INTO agent_runs "
+                "(id, run_id, session_id, user_id, agent_name, prompt_version, "
+                "status, latency_ms, error, created_at) VALUES "
                 "(2, 'evaluation-run', 1, 1, 'evaluation', 'v2', "
                 "'success', 12, NULL, '2026-07-18T00:00:01')"
             )
         )
         connection.execute(
             text(
-                "INSERT INTO agent_runs VALUES "
+                "INSERT INTO agent_runs "
+                "(id, run_id, session_id, user_id, agent_name, prompt_version, "
+                "status, latency_ms, error, created_at) VALUES "
                 "(3, 'improvement-run', 1, 1, 'improvement', 'v3', "
                 "'success', 13, NULL, '2026-07-18T00:00:02')"
             )
         )
         connection.execute(
             text(
-                "INSERT INTO agent_runs VALUES "
+                "INSERT INTO agent_runs "
+                "(id, run_id, session_id, user_id, agent_name, prompt_version, "
+                "status, latency_ms, error, created_at) VALUES "
                 "(4, 'resume-run', 1, 1, 'resume', 'v4', "
                 "'success', 14, NULL, '2026-07-18T00:00:03')"
             )

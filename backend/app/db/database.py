@@ -43,11 +43,13 @@ def init_db():
     ensure_history_records_columns()
     ensure_user_scope_columns()
     ensure_file_category_column()
+    ensure_file_security_columns()
     ensure_target_job_active_index()
     ensure_interview_session_agent_columns()
     ensure_interview_turn_evaluation_columns()
     ensure_interview_improvement_columns()
     ensure_agent_run_supports_resume()
+    ensure_agent_run_request_id()
 
 
 def get_db():
@@ -119,6 +121,71 @@ def ensure_file_category_column():
                 "NOT NULL DEFAULT 'other'"
             )
         )
+
+
+def ensure_file_security_columns():
+    inspector = inspect(engine)
+    columns = inspector.get_columns("files")
+    column_names = {column["name"] for column in columns}
+
+    with engine.begin() as connection:
+        if "size_bytes" not in column_names:
+            connection.execute(
+                text(
+                    "ALTER TABLE files ADD COLUMN size_bytes INTEGER "
+                    "NOT NULL DEFAULT 0"
+                )
+            )
+        if "content_sha256" not in column_names:
+            connection.execute(
+                text("ALTER TABLE files ADD COLUMN content_sha256 TEXT")
+            )
+        if "upload_idempotency_key_hash" not in column_names:
+            connection.execute(
+                text(
+                    "ALTER TABLE files ADD COLUMN "
+                    "upload_idempotency_key_hash TEXT"
+                )
+            )
+        connection.execute(
+            text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS "
+                "ux_files_user_upload_idempotency "
+                "ON files (user_id, upload_idempotency_key_hash) "
+                "WHERE upload_idempotency_key_hash IS NOT NULL"
+            )
+        )
+
+    _backfill_legacy_file_sizes()
+
+
+def _backfill_legacy_file_sizes():
+    upload_root = Path(settings.upload_dir)
+    if not upload_root.is_absolute():
+        upload_root = Path(__file__).resolve().parents[2] / upload_root
+    upload_root = upload_root.resolve()
+
+    with engine.begin() as connection:
+        rows = connection.execute(
+            text(
+                "SELECT id, user_id, file_path FROM files "
+                "WHERE size_bytes = 0 AND user_id IS NOT NULL"
+            )
+        ).mappings()
+        for row in rows:
+            candidate = Path(row["file_path"])
+            try:
+                resolved = candidate.resolve()
+                expected_root = (upload_root / str(row["user_id"])).resolve()
+                if not resolved.is_relative_to(expected_root) or not resolved.is_file():
+                    continue
+                size_bytes = resolved.stat().st_size
+            except OSError:
+                continue
+            connection.execute(
+                text("UPDATE files SET size_bytes = :size_bytes WHERE id = :id"),
+                {"size_bytes": size_bytes, "id": row["id"]},
+            )
 
 
 def ensure_target_job_active_index():
@@ -282,3 +349,20 @@ def ensure_agent_run_supports_resume():
             "CREATE INDEX ix_agent_runs_run_id ON agent_runs (run_id)",
         ):
             connection.execute(text(index_sql))
+
+
+def ensure_agent_run_request_id():
+    inspector = inspect(engine)
+    columns = inspector.get_columns("agent_runs")
+    column_names = {column["name"] for column in columns}
+    with engine.begin() as connection:
+        if "request_id" not in column_names:
+            connection.execute(
+                text("ALTER TABLE agent_runs ADD COLUMN request_id TEXT")
+            )
+        connection.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_agent_runs_request_id "
+                "ON agent_runs (request_id)"
+            )
+        )

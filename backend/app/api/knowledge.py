@@ -1,8 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy.orm import Session
 
 from app.core.security import get_current_user
+from app.core.config import settings
+from app.core.input_validation import validate_identifier_text, validate_safe_text
 from app.db.database import get_db
 from app.db.models import FileRecord, User
 from app.services.document_loader import DocumentLoadError, load_document_text
@@ -18,16 +20,41 @@ router = APIRouter()
 
 
 class PreviewTextRequest(BaseModel):
-    file_id: str
+    model_config = ConfigDict(extra="forbid")
+    file_id: str = Field(max_length=64)
+
+    @field_validator("file_id")
+    @classmethod
+    def validate_file_id(cls, value: str) -> str:
+        return validate_identifier_text(
+            value, field_name="文件 ID", max_chars=64
+        )
 
 class PreviewChunksRequest(BaseModel):
-    file_id: str
-    chunk_size: int = 800
-    chunk_overlap: int = 120
+    model_config = ConfigDict(extra="forbid")
+    file_id: str = Field(max_length=64)
+    chunk_size: int = Field(default=800, ge=100, le=4000)
+    chunk_overlap: int = Field(default=120, ge=0, le=1000)
+
+    @field_validator("file_id")
+    @classmethod
+    def validate_file_id(cls, value: str) -> str:
+        return PreviewTextRequest.validate_file_id(value)
 
 class SearchKnowledgeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     query: str
-    top_k: int = 5
+    top_k: int = Field(default=5, ge=1, le=10)
+
+    @field_validator("query")
+    @classmethod
+    def validate_query(cls, value: str) -> str:
+        return validate_safe_text(
+            value,
+            field_name="检索问题",
+            max_chars=settings.max_chat_input_chars,
+            strip=True,
+        )
 
 @router.post(
     "/knowledge/preview-text",
@@ -52,7 +79,11 @@ def preview_text(
         raise HTTPException(status_code=404, detail="文件记录不存在")
 
     try:
-        text = load_document_text(record.file_path, record.file_type)
+        text = load_document_text(
+            record.file_path,
+            record.file_type,
+            current_user.id,
+        )
     except DocumentLoadError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -90,7 +121,11 @@ def preview_chunks(
         raise HTTPException(status_code=404, detail="文件记录不存在")
 
     try:
-        text = load_document_text(record.file_path, record.file_type)
+        text = load_document_text(
+            record.file_path,
+            record.file_type,
+            current_user.id,
+        )
         chunks = split_text(
             text=text,
             metadata={

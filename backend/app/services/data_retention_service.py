@@ -1,5 +1,4 @@
 from datetime import datetime, timedelta
-from pathlib import Path
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -19,6 +18,7 @@ from app.db.models import (
 )
 from app.services.usage_service import get_local_now
 from app.services.vector_store import delete_file_vectors
+from app.services.upload_security import resolve_owned_storage_path
 
 CLEANUP_CONFIRMATION = "DELETE_EXPIRED_DATA"
 
@@ -118,8 +118,11 @@ def cleanup_expired_data(db: Session, now: datetime | None = None) -> dict:
             )
             continue
         try:
+            file_path = resolve_owned_storage_path(
+                record.user_id,
+                record.file_path,
+            )
             delete_file_vectors(record.user_id, record.file_id)
-            file_path = Path(record.file_path)
             if file_path.exists():
                 file_path.unlink()
         except Exception as exc:

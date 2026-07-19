@@ -1,10 +1,12 @@
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 from sqlalchemy.orm import Session
 
 from app.core.security import get_current_user
+from app.core.config import settings
+from app.core.input_validation import validate_safe_text
 from app.db.database import get_db
 from app.db.models import User
 from app.services.chat_service import ChatServiceError, ask_with_rag
@@ -14,6 +16,7 @@ from app.services.usage_service import (
     release_usage,
     reserve_usage,
 )
+from app.services.rate_limit_service import enforce_user_rate_limit
 
 router = APIRouter()
 
@@ -22,6 +25,16 @@ class ChatAskRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     question: str
+
+    @field_validator("question")
+    @classmethod
+    def validate_question(cls, value: str) -> str:
+        return validate_safe_text(
+            value,
+            field_name="问题",
+            max_chars=settings.max_chat_input_chars,
+            strip=True,
+        )
 
 
 @router.post(
@@ -34,6 +47,7 @@ def ask_chat(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    enforce_user_rate_limit(db, current_user.id, "chat_burst")
     try:
         reservation = reserve_usage(
             db,

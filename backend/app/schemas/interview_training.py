@@ -3,6 +3,8 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.agents.schemas import InterviewPlanOutput, SupervisorDecisionOutput
+from app.core.config import settings
+from app.core.input_validation import validate_identifier_text, validate_safe_text
 
 InterviewMode = Literal["quick", "standard", "deep_dive"]
 InterviewStatus = Literal["draft", "in_progress", "completed", "cancelled"]
@@ -36,7 +38,11 @@ class InterviewSessionCreate(BaseModel):
     @field_validator("title")
     @classmethod
     def normalize_title(cls, value: str) -> str:
-        normalized = value.strip()
+        normalized = validate_identifier_text(
+            value,
+            field_name="面试标题",
+            max_chars=200,
+        )
         if not normalized:
             raise ValueError("面试标题不能为空")
         return normalized
@@ -48,6 +54,11 @@ class InterviewSessionCreate(BaseModel):
         seen = set()
         for value in values:
             file_id = value.strip()
+            validate_identifier_text(
+                file_id,
+                field_name="项目文件 ID",
+                max_chars=64,
+            )
             if not file_id:
                 raise ValueError("项目文件 ID 不能为空")
             if file_id not in seen:
@@ -72,7 +83,11 @@ class InterviewSessionUpdate(BaseModel):
     def normalize_optional_title(cls, value: str | None) -> str | None:
         if value is None:
             return None
-        normalized = value.strip()
+        normalized = validate_identifier_text(
+            value,
+            field_name="面试标题",
+            max_chars=200,
+        )
         if not normalized:
             raise ValueError("面试标题不能为空")
         return normalized
@@ -98,12 +113,17 @@ class InterviewAnswerRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     turn_id: int = Field(gt=0)
-    answer: str = Field(min_length=1, max_length=20000)
+    answer: str = Field(min_length=1, max_length=50000)
 
     @field_validator("answer")
     @classmethod
     def normalize_answer(cls, value: str) -> str:
-        normalized = value.strip()
+        normalized = validate_safe_text(
+            value,
+            field_name="面试回答",
+            max_chars=settings.max_interview_answer_chars,
+            strip=True,
+        )
         if not normalized:
             raise ValueError("回答不能为空")
         return normalized

@@ -124,7 +124,7 @@ def test_user_rebuild_does_not_delete_other_users_vectors(
     monkeypatch.setattr(
         vector_store,
         "load_document_text",
-        lambda file_path, file_type: "user a content",
+        lambda file_path, file_type, user_id: "user a content",
     )
 
     result = vector_store.rebuild_vector_store(db_session, user_a.id)

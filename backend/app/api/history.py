@@ -41,7 +41,12 @@ def history_record_to_dict(record: HistoryRecord) -> dict:
     description="查看自由问答、岗位分析等历史记录。当前主要用于查看 RAG 自由问答记录。",
 )
 def list_history(
-    mode: str | None = Query(default=None, description="历史类型，例如 chat"),
+    mode: str | None = Query(
+        default=None,
+        max_length=32,
+        pattern=r"^[a-z_]*$",
+        description="历史类型，例如 chat",
+    ),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):

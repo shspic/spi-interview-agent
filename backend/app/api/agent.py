@@ -1,10 +1,12 @@
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
 from app.core.security import get_current_user
+from app.core.config import settings
+from app.core.input_validation import validate_safe_text
 from app.db.database import get_db
 from app.db.models import User
 from app.services.agent_service import AgentServiceError, ask_agent
@@ -17,6 +19,16 @@ class AgentAskRequest(BaseModel):
     mode: Literal["auto", "local", "web", "hybrid"] = "auto"
     top_k: int = Field(default=5, ge=1, le=10)
     max_web_results: int = Field(default=5, ge=1, le=10)
+
+    @field_validator("question")
+    @classmethod
+    def validate_question(cls, value: str) -> str:
+        return validate_safe_text(
+            value,
+            field_name="任务描述",
+            max_chars=settings.max_task_input_chars,
+            strip=True,
+        )
 
 
 @router.post(

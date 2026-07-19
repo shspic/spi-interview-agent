@@ -113,7 +113,11 @@ def rebuild_vector_store(db: Session, user_id: int) -> dict[str, Any]:
 
     for record in records:
         try:
-            text = load_document_text(record.file_path, record.file_type)
+            text = load_document_text(
+                record.file_path,
+                record.file_type,
+                user_id,
+            )
 
             chunks = split_text(
                 text=text,
@@ -160,7 +164,7 @@ def rebuild_vector_store(db: Session, user_id: int) -> dict[str, Any]:
 
         except Exception as exc:
             record.status = "failed"
-            record.error_message = str(exc)
+            record.error_message = "文件索引失败，请稍后重试"
             failed_files += 1
 
     db.commit()

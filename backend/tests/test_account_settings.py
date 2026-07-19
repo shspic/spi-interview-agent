@@ -1,5 +1,6 @@
 from datetime import datetime
 
+from app.core.config import settings
 from app.core.security import create_access_token, hash_password
 from app.db.models import (
     DailyUsageCounter,
@@ -191,8 +192,12 @@ def test_cleanup_preview_and_execution_are_user_scoped_and_keep_configuration(
 ):
     first = add_user(db_session, "cleanup_first")
     second = add_user(db_session, "cleanup_second")
-    first_file = tmp_path / "first.txt"
-    second_file = tmp_path / "second.txt"
+    upload_root = tmp_path / "uploads"
+    monkeypatch.setattr(settings, "upload_dir", str(upload_root))
+    first_file = upload_root / str(first.id) / "first.txt"
+    second_file = upload_root / str(second.id) / "second.txt"
+    first_file.parent.mkdir(parents=True)
+    second_file.parent.mkdir(parents=True)
     first_file.write_text("first", encoding="utf-8")
     second_file.write_text("second", encoding="utf-8")
     add_cleanup_data(db_session, first, first_file, "first")
@@ -256,7 +261,10 @@ def test_cleanup_rejects_bad_credentials_and_reports_vector_failure(
     tmp_path,
 ):
     user = add_user(db_session, "cleanup_failure")
-    file_path = tmp_path / "failure.txt"
+    upload_root = tmp_path / "uploads"
+    monkeypatch.setattr(settings, "upload_dir", str(upload_root))
+    file_path = upload_root / str(user.id) / "failure.txt"
+    file_path.parent.mkdir(parents=True)
     file_path.write_text("failure", encoding="utf-8")
     add_cleanup_data(db_session, user, file_path, "failure")
 

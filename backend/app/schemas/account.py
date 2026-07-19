@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class DataCleanupPreviewRequest(BaseModel):
@@ -8,5 +8,5 @@ class DataCleanupPreviewRequest(BaseModel):
 class DataCleanupRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    current_password: str
-    confirm: str
+    current_password: str = Field(max_length=72)
+    confirm: str = Field(max_length=64)

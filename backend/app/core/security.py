@@ -9,6 +9,7 @@ from jwt import InvalidTokenError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.input_validation import validate_safe_text
 from app.db.database import get_db
 from app.db.models import User
 
@@ -43,6 +44,14 @@ def validate_username(username: str) -> str:
 
 
 def validate_password(password: str) -> None:
+    try:
+        validate_safe_text(
+            password,
+            field_name="密码",
+            max_chars=MAX_PASSWORD_BYTES,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     if len(password) < MIN_PASSWORD_LENGTH:
         raise HTTPException(
             status_code=400,

@@ -1,5 +1,7 @@
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.core.input_validation import validate_identifier_text
+
 
 class ResumeProjectDescriptionGenerateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -17,6 +19,11 @@ class ResumeProjectDescriptionGenerateRequest(BaseModel):
         seen = set()
         for value in values:
             file_id = value.strip()
+            validate_identifier_text(
+                file_id,
+                field_name="项目文件 ID",
+                max_chars=64,
+            )
             if not file_id:
                 raise ValueError("项目文件 ID 不能为空")
             if file_id not in seen:

@@ -1,5 +1,6 @@
 from datetime import datetime
 
+from app.core.config import settings
 from app.core.security import create_access_token
 from app.db.models import (
     AdminAuditLog,
@@ -93,11 +94,14 @@ def test_cleanup_preview_preserves_data_and_cleanup_respects_retention_scope(
 ):
     admin = add_user(db_session, "cleanup_admin", is_admin=True)
     user = add_user(db_session, "cleanup_user")
+    upload_root = tmp_path / "uploads"
+    monkeypatch.setattr(settings, "upload_dir", str(upload_root))
     old = "2000-01-01T00:00:00"
     recent = datetime.now().isoformat(timespec="seconds")
-    old_file_path = tmp_path / "old.txt"
+    old_file_path = upload_root / str(user.id) / "old.txt"
+    old_file_path.parent.mkdir(parents=True)
     old_file_path.write_text("old", encoding="utf-8")
-    recent_file_path = tmp_path / "recent.txt"
+    recent_file_path = upload_root / str(user.id) / "recent.txt"
     recent_file_path.write_text("recent", encoding="utf-8")
     db_session.add_all(
         [
@@ -136,7 +140,7 @@ def test_cleanup_preview_preserves_data_and_cleanup_respects_retention_scope(
                 file_id="missing-old-file",
                 filename="missing.txt",
                 file_type="txt",
-                file_path=str(tmp_path / "missing.txt"),
+                file_path=str(upload_root / str(user.id) / "missing.txt"),
                 category="other",
                 status="indexed",
                 created_at=old,
@@ -237,8 +241,11 @@ def test_cleanup_reports_vector_failure_and_keeps_file_record(
 ):
     admin = add_user(db_session, "cleanup_fail_admin", is_admin=True)
     user = add_user(db_session, "cleanup_fail_user")
+    upload_root = tmp_path / "uploads"
+    monkeypatch.setattr(settings, "upload_dir", str(upload_root))
     old = "2000-01-01T00:00:00"
-    file_path = tmp_path / "failed.txt"
+    file_path = upload_root / str(user.id) / "failed.txt"
+    file_path.parent.mkdir(parents=True)
     file_path.write_text("old", encoding="utf-8")
     db_session.add(
         FileRecord(

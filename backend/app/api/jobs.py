@@ -1,10 +1,12 @@
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 from sqlalchemy.orm import Session
 
 from app.core.security import get_current_user
+from app.core.config import settings
+from app.core.input_validation import validate_safe_text
 from app.db.database import get_db
 from app.db.models import User
 from app.services.job_service import JobServiceError, analyze_job
@@ -23,6 +25,16 @@ class JobAnalyzeRequest(BaseModel):
 
     job_description: str
     use_web_search: bool = False
+
+    @field_validator("job_description")
+    @classmethod
+    def validate_job_description(cls, value: str) -> str:
+        return validate_safe_text(
+            value,
+            field_name="岗位描述",
+            max_chars=settings.max_job_description_chars,
+            strip=True,
+        )
 
 
 @router.post(

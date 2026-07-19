@@ -376,9 +376,13 @@ def test_delete_user_cleans_files_vectors_and_database_without_cross_user_damage
     admin = add_user(db_session, "delete_admin", is_admin=True)
     target = add_user(db_session, "delete_target")
     other = add_user(db_session, "delete_other")
-    target_path = tmp_path / "target.txt"
+    upload_root = tmp_path / "uploads"
+    monkeypatch.setattr(settings, "upload_dir", str(upload_root))
+    target_path = upload_root / str(target.id) / "target.txt"
+    target_path.parent.mkdir(parents=True)
     target_path.write_text("target", encoding="utf-8")
-    other_path = tmp_path / "other.txt"
+    other_path = upload_root / str(other.id) / "other.txt"
+    other_path.parent.mkdir(parents=True)
     other_path.write_text("other", encoding="utf-8")
     now = datetime.now().isoformat(timespec="seconds")
     db_session.add_all(
@@ -455,7 +459,10 @@ def test_delete_user_reports_vector_failure_without_claiming_success(
 ):
     admin = add_user(db_session, "delete_fail_admin", is_admin=True)
     target = add_user(db_session, "delete_fail_target")
-    file_path = tmp_path / "target.txt"
+    upload_root = tmp_path / "uploads"
+    monkeypatch.setattr(settings, "upload_dir", str(upload_root))
+    file_path = upload_root / str(target.id) / "target.txt"
+    file_path.parent.mkdir(parents=True)
     file_path.write_text("target", encoding="utf-8")
     now = datetime.now().isoformat(timespec="seconds")
     db_session.add(

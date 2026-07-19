@@ -5,6 +5,8 @@ from uuid import uuid4
 from langgraph.graph import END, START, StateGraph
 from sqlalchemy.orm import Session
 
+from app.core.http_security import get_current_request_id
+
 from app.agents.evidence_agent import EvidenceAgent
 from app.agents.evaluation_agent import EvaluationAgent
 from app.agents.interviewer_agent import InterviewerAgent
@@ -107,6 +109,7 @@ class InterviewAgentRuntime:
         self.db.add(
             AgentRun(
                 run_id=self.run_id,
+                request_id=get_current_request_id(),
                 session_id=self.session_id,
                 user_id=self.user_id,
                 agent_name=agent_name,

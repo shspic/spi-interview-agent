@@ -89,6 +89,16 @@ class TargetJob(Base):
 
 class FileRecord(Base):
     __tablename__ = "files"
+    __table_args__ = (
+        CheckConstraint("size_bytes >= 0", name="ck_files_size_bytes"),
+        Index(
+            "ux_files_user_upload_idempotency",
+            "user_id",
+            "upload_idempotency_key_hash",
+            unique=True,
+            sqlite_where=text("upload_idempotency_key_hash IS NOT NULL"),
+        ),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(
@@ -101,6 +111,9 @@ class FileRecord(Base):
     filename = Column(Text, nullable=False)
     file_type = Column(Text, nullable=False)
     file_path = Column(Text, nullable=False)
+    size_bytes = Column(Integer, nullable=False, default=0, server_default="0")
+    content_sha256 = Column(Text, nullable=True)
+    upload_idempotency_key_hash = Column(Text, nullable=True)
     category = Column(Text, nullable=False, default="other", server_default="other")
     status = Column(Text, nullable=False, default="uploaded")
     error_message = Column(Text, nullable=True)
@@ -463,6 +476,7 @@ class AgentRun(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     run_id = Column(Text, nullable=False)
+    request_id = Column(Text, nullable=True, index=True)
     session_id = Column(
         Integer,
         ForeignKey("interview_sessions.id", ondelete="CASCADE"),
@@ -586,6 +600,60 @@ class UsageEvent(Base):
     completed_at = Column(Text, nullable=True)
     created_at = Column(Text, nullable=False)
     updated_at = Column(Text, nullable=False)
+
+
+class RateLimitBucket(Base):
+    __tablename__ = "rate_limit_buckets"
+    __table_args__ = (
+        UniqueConstraint(
+            "scope",
+            "subject_type",
+            "subject_hash",
+            "window_started_at",
+            name="uq_rate_limit_bucket_subject_window",
+        ),
+        CheckConstraint("attempts > 0", name="ck_rate_limit_bucket_attempts"),
+        Index("ix_rate_limit_buckets_expires_at", "expires_at"),
+        Index(
+            "ix_rate_limit_buckets_subject",
+            "scope",
+            "subject_type",
+            "subject_hash",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    scope = Column(Text, nullable=False)
+    subject_type = Column(Text, nullable=False)
+    subject_hash = Column(Text, nullable=False)
+    window_started_at = Column(Integer, nullable=False)
+    expires_at = Column(Integer, nullable=False)
+    attempts = Column(Integer, nullable=False, default=1)
+    updated_at = Column(Text, nullable=False)
+
+
+class UploadReservation(Base):
+    __tablename__ = "upload_reservations"
+    __table_args__ = (
+        CheckConstraint("size_bytes > 0", name="ck_upload_reservation_size"),
+        Index(
+            "ix_upload_reservations_user_expires",
+            "user_id",
+            "expires_at",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    reservation_id = Column(Text, unique=True, nullable=False, index=True)
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    size_bytes = Column(Integer, nullable=False)
+    expires_at = Column(Integer, nullable=False)
+    created_at = Column(Text, nullable=False)
 
 
 class DailyUsageCounter(Base):

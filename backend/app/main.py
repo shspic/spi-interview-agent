@@ -1,7 +1,11 @@
 from contextlib import asynccontextmanager
+import re
 
 from fastapi import FastAPI
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.health import router as health_router
 from app.db.database import SessionLocal, init_db
@@ -31,6 +35,8 @@ from app.services.registration_setting_service import (
     RegistrationSettingError,
     ensure_registration_setting,
 )
+from app.core.config import settings
+from app.core.http_security import HTTPSecurityMiddleware
 
 
 @asynccontextmanager
@@ -53,13 +59,101 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.add_middleware(HTTPSecurityMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=list(settings.cors_allowed_origins),
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=[
+        "Authorization",
+        "Content-Type",
+        "Idempotency-Key",
+        "X-Request-ID",
+    ],
+    expose_headers=["Content-Disposition", "X-Request-ID"],
 )
+
+WINDOWS_PATH_PATTERN = re.compile(r"(?i)\b[A-Z]:[\\/][^\s\"']+")
+UNIX_PATH_PATTERN = re.compile(r"(?<![A-Za-z0-9])/(?:home|tmp|var|opt)/[^\s\"']+")
+SECRET_VALUE_PATTERN = re.compile(
+    r"(?i)\b(?:authorization|cookie|password|invite_code|api_key|jwt|token)"
+    r"\s*[:=]\s*[^\s,;]+"
+)
+
+
+def sanitize_error_detail(value):
+    if isinstance(value, str):
+        sanitized = WINDOWS_PATH_PATTERN.sub("[已脱敏路径]", value)
+        sanitized = UNIX_PATH_PATTERN.sub("[已脱敏路径]", sanitized)
+        sanitized = SECRET_VALUE_PATTERN.sub("[已脱敏敏感字段]", sanitized)
+        return sanitized[:500]
+    if isinstance(value, list):
+        return [sanitize_error_detail(item) for item in value[:20]]
+    if isinstance(value, dict):
+        return {
+            str(key)[:64]: sanitize_error_detail(item)
+            for key, item in list(value.items())[:20]
+        }
+    if value is None or isinstance(value, (bool, int, float)):
+        return value
+    return "请求失败"
+
+
+@app.exception_handler(StarletteHTTPException)
+async def safe_http_exception_handler(request, exc):
+    request_id = getattr(request.state, "request_id", "")
+    if exc.status_code == 500:
+        detail = "服务器内部错误，请稍后重试"
+        error_code = "internal_server_error"
+        details = None
+    else:
+        detail = sanitize_error_detail(exc.detail)
+        error_code = (
+            detail.get("error_code", f"http_{exc.status_code}")
+            if isinstance(detail, dict)
+            else f"http_{exc.status_code}"
+        )
+        details = detail if isinstance(detail, (dict, list)) else None
+    message = (
+        detail.get("message", "请求失败")
+        if isinstance(detail, dict)
+        else str(detail)
+    )
+    return JSONResponse(
+        status_code=exc.status_code,
+        headers=exc.headers,
+        content={
+            "error_code": error_code,
+            "message": message,
+            "request_id": request_id,
+            "details": details,
+            "detail": detail,
+        },
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def safe_validation_exception_handler(request, exc):
+    request_id = getattr(request.state, "request_id", "")
+    sanitized_errors = [
+        {
+            "type": item.get("type", "value_error"),
+            "loc": list(item.get("loc", [])),
+            "msg": item.get("msg", "输入内容无效"),
+        }
+        for item in exc.errors()
+    ]
+    return JSONResponse(
+        status_code=422,
+        content={
+            "error_code": "validation_error",
+            "message": "请求内容不符合接口要求",
+            "request_id": request_id,
+            "details": sanitized_errors,
+            "detail": sanitized_errors,
+        },
+    )
 
 app.include_router(health_router, prefix="/api", tags=["health"])
 app.include_router(files_router, prefix="/api", tags=["files"])

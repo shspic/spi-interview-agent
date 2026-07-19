@@ -10,19 +10,19 @@ class UserStatusUpdateRequest(BaseModel):
 class AdminPasswordResetRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    new_password: str
+    new_password: str = Field(max_length=72)
 
 
 class UserDeleteRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    confirm_username: str
+    confirm_username: str = Field(max_length=32)
 
 
 class InviteCodeUpdateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    invite_code: str
+    invite_code: str = Field(max_length=64)
 
 
 class CleanupRequest(BaseModel):

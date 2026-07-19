@@ -1,10 +1,12 @@
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator
 from sqlalchemy.orm import Session
 
 from app.core.security import get_current_user
+from app.core.config import settings
+from app.core.input_validation import validate_safe_text
 from app.db.database import get_db
 from app.db.models import TargetJob, User
 
@@ -16,19 +18,38 @@ class TargetJobCreateRequest(BaseModel):
 
     job_title: str = Field(min_length=1, max_length=200)
     company_name: str = Field(default="", max_length=200)
-    jd_text: str = Field(min_length=1, max_length=50000)
+    jd_text: str = Field(min_length=1, max_length=100000)
     notes: str = Field(default="", max_length=5000)
     is_active: bool = False
 
     @field_validator("job_title", "jd_text")
     @classmethod
-    def validate_required_text(cls, value: str) -> str:
-        normalized = value.strip()
+    def validate_required_text(cls, value: str, info: ValidationInfo) -> str:
+        normalized = validate_safe_text(
+            value,
+            field_name="目标岗位名称" if info.field_name == "job_title" else "岗位描述",
+            max_chars=(
+                200
+                if info.field_name == "job_title"
+                else settings.max_job_description_chars
+            ),
+            strip=True,
+        )
 
         if not normalized:
             raise ValueError("岗位名称和 JD 文本不能为空")
 
         return normalized
+
+    @field_validator("company_name", "notes")
+    @classmethod
+    def validate_optional_text(cls, value: str, info: ValidationInfo) -> str:
+        return validate_safe_text(
+            value,
+            field_name="岗位补充信息",
+            max_chars=200 if info.field_name == "company_name" else 5000,
+            allow_empty=True,
+        )
 
 
 class TargetJobUpdateRequest(BaseModel):
@@ -36,18 +57,37 @@ class TargetJobUpdateRequest(BaseModel):
 
     job_title: str = Field(min_length=1, max_length=200)
     company_name: str = Field(default="", max_length=200)
-    jd_text: str = Field(min_length=1, max_length=50000)
+    jd_text: str = Field(min_length=1, max_length=100000)
     notes: str = Field(default="", max_length=5000)
 
     @field_validator("job_title", "jd_text")
     @classmethod
-    def validate_required_text(cls, value: str) -> str:
-        normalized = value.strip()
+    def validate_required_text(cls, value: str, info: ValidationInfo) -> str:
+        normalized = validate_safe_text(
+            value,
+            field_name="目标岗位名称" if info.field_name == "job_title" else "岗位描述",
+            max_chars=(
+                200
+                if info.field_name == "job_title"
+                else settings.max_job_description_chars
+            ),
+            strip=True,
+        )
 
         if not normalized:
             raise ValueError("岗位名称和 JD 文本不能为空")
 
         return normalized
+
+    @field_validator("company_name", "notes")
+    @classmethod
+    def validate_optional_text(cls, value: str, info: ValidationInfo) -> str:
+        return validate_safe_text(
+            value,
+            field_name="岗位补充信息",
+            max_chars=200 if info.field_name == "company_name" else 5000,
+            allow_empty=True,
+        )
 
 
 class TargetJobResponse(BaseModel):

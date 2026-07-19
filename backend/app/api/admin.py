@@ -39,6 +39,7 @@ from app.services.registration_setting_service import (
     RegistrationSettingError,
     update_registration_invite_code,
 )
+from app.services.rate_limit_service import enforce_user_rate_limit
 from app.services.usage_service import get_local_now
 
 router = APIRouter()
@@ -61,7 +62,11 @@ def _date_range(
 
 @router.get("/admin/users")
 def get_users(
-    username: str | None = None,
+    username: str | None = Query(
+        default=None,
+        max_length=64,
+        pattern=r"^[A-Za-z0-9_]*$",
+    ),
     is_active: bool | None = None,
     is_admin: bool | None = None,
     sort_order: Literal["asc", "desc"] = "desc",
@@ -100,6 +105,7 @@ def update_user_status(
     db: Session = Depends(get_db),
     current_admin: User = Depends(get_current_admin),
 ):
+    enforce_user_rate_limit(db, current_admin.id, "admin_write")
     try:
         user = set_user_active_status(
             db,
@@ -122,6 +128,7 @@ def reset_password(
     db: Session = Depends(get_db),
     current_admin: User = Depends(get_current_admin),
 ):
+    enforce_user_rate_limit(db, current_admin.id, "admin_write")
     try:
         reset_user_password(
             db,
@@ -141,6 +148,7 @@ def delete_user(
     db: Session = Depends(get_db),
     current_admin: User = Depends(get_current_admin),
 ):
+    enforce_user_rate_limit(db, current_admin.id, "admin_write")
     try:
         return delete_user_and_data(
             db,
@@ -182,7 +190,11 @@ def user_usage(
 def agent_runs(
     user_id: int | None = None,
     session_id: int | None = None,
-    agent_name: str | None = None,
+    agent_name: str | None = Query(
+        default=None,
+        max_length=64,
+        pattern=r"^[a-z_]*$",
+    ),
     status: Literal["success", "error"] | None = None,
     date_from: date | None = None,
     date_to: date | None = None,
@@ -227,6 +239,7 @@ def update_invite_code(
     db: Session = Depends(get_db),
     current_admin: User = Depends(get_current_admin),
 ):
+    enforce_user_rate_limit(db, current_admin.id, "admin_write")
     try:
         registration_setting = update_registration_invite_code(
             db,
@@ -278,6 +291,7 @@ def cleanup(
     db: Session = Depends(get_db),
     current_admin: User = Depends(get_current_admin),
 ):
+    enforce_user_rate_limit(db, current_admin.id, "admin_write")
     if request.confirm != CLEANUP_CONFIRMATION:
         add_admin_audit_log(
             db,
@@ -318,7 +332,11 @@ def cleanup(
 
 @router.get("/admin/audit-logs")
 def audit_logs(
-    action: str | None = None,
+    action: str | None = Query(
+        default=None,
+        max_length=64,
+        pattern=r"^[a-z_]*$",
+    ),
     admin_user_id: int | None = None,
     target_user_id: int | None = None,
     status: Literal["success", "failed"] | None = None,

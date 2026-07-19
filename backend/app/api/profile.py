@@ -6,6 +6,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy.orm import Session
 
 from app.core.security import get_current_user
+from app.core.config import settings
+from app.core.input_validation import validate_safe_text
 from app.db.database import get_db
 from app.db.models import User, UserProfile
 
@@ -17,8 +19,38 @@ class UserProfileRequest(BaseModel):
 
     display_name: str = Field(default="", max_length=100)
     target_direction: str = Field(default="", max_length=200)
-    self_introduction: str = Field(default="", max_length=5000)
+    self_introduction: str = Field(default="", max_length=30000)
     technical_skills: list[str] = Field(default_factory=list, max_length=30)
+
+    @field_validator("display_name")
+    @classmethod
+    def validate_display_name(cls, value: str) -> str:
+        return validate_safe_text(
+            value,
+            field_name="显示名称",
+            max_chars=100,
+            allow_empty=True,
+        )
+
+    @field_validator("target_direction")
+    @classmethod
+    def validate_target_direction(cls, value: str) -> str:
+        return validate_safe_text(
+            value,
+            field_name="目标方向",
+            max_chars=200,
+            allow_empty=True,
+        )
+
+    @field_validator("self_introduction")
+    @classmethod
+    def validate_self_introduction(cls, value: str) -> str:
+        return validate_safe_text(
+            value,
+            field_name="自我介绍",
+            max_chars=settings.max_profile_text_chars,
+            allow_empty=True,
+        )
 
     @field_validator("technical_skills")
     @classmethod
@@ -28,6 +60,13 @@ class UserProfileRequest(BaseModel):
 
         for skill in skills:
             value = skill.strip()
+
+            validate_safe_text(
+                value,
+                field_name="技能项",
+                max_chars=50,
+                allow_empty=True,
+            )
 
             if not value:
                 continue

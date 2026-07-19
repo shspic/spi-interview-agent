@@ -1,7 +1,7 @@
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, ConfigDict
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -21,31 +21,36 @@ from app.services.registration_setting_service import (
     RegistrationSettingError,
     verify_registration_invite,
 )
+from app.services.rate_limit_service import (
+    enforce_ip_rate_limit,
+    enforce_user_rate_limit,
+)
 
 router = APIRouter()
+DUMMY_PASSWORD_HASH = "$2b$12$4FmMnne2zvpIMYOumkZHpOHSi70GDSu5WdT4sqLiUqwI408BO4YNq"
 
 
 class RegisterRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    username: str
-    password: str
-    invite_code: str
+    username: str = Field(max_length=64)
+    password: str = Field(max_length=72)
+    invite_code: str = Field(max_length=64)
 
 
 class LoginRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    username: str
-    password: str
+    username: str = Field(max_length=64)
+    password: str = Field(max_length=72)
 
 
 class ChangePasswordRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    current_password: str
-    new_password: str
-    confirm_password: str
+    current_password: str = Field(max_length=72)
+    new_password: str = Field(max_length=72)
+    confirm_password: str = Field(max_length=72)
 
 
 def user_to_dict(user: User) -> dict:
@@ -61,9 +66,11 @@ def user_to_dict(user: User) -> dict:
 
 @router.post("/auth/register", status_code=status.HTTP_201_CREATED)
 def register_user(
+    http_request: Request,
     request: RegisterRequest,
     db: Session = Depends(get_db),
 ):
+    enforce_ip_rate_limit(db, http_request, "register")
     try:
         invite_is_valid = verify_registration_invite(db, request.invite_code)
     except RegistrationSettingError as exc:
@@ -112,13 +119,17 @@ def register_user(
 
 @router.post("/auth/login")
 def login_user(
+    http_request: Request,
     request: LoginRequest,
     db: Session = Depends(get_db),
 ):
+    enforce_ip_rate_limit(db, http_request, "login")
     username = normalize_username(request.username)
     user = db.query(User).filter(User.username == username).first()
+    password_hash = user.password_hash if user is not None else DUMMY_PASSWORD_HASH
+    password_is_valid = verify_password(request.password, password_hash)
 
-    if user is None or not verify_password(request.password, user.password_hash):
+    if user is None or not password_is_valid:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="用户名或密码错误",
@@ -155,6 +166,7 @@ def change_password(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    enforce_user_rate_limit(db, current_user.id, "password_change")
     if request.new_password != request.confirm_password:
         raise HTTPException(status_code=400, detail="两次输入的新密码不一致")
     if not verify_password(request.current_password, current_user.password_hash):

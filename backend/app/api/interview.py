@@ -1,8 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
 from app.core.security import get_current_user
+from app.core.config import settings
+from app.core.input_validation import validate_safe_text
 from app.db.database import get_db
 from app.db.models import User
 from app.services.interview_service import (
@@ -19,6 +21,26 @@ class InterviewQuestionRequest(BaseModel):
     job_description: str
     question_index: int = Field(default=1, ge=1)
 
+    @field_validator("interview_type")
+    @classmethod
+    def validate_interview_type(cls, value: str) -> str:
+        return validate_safe_text(
+            value,
+            field_name="面试类型",
+            max_chars=200,
+            strip=True,
+        )
+
+    @field_validator("job_description")
+    @classmethod
+    def validate_job_description(cls, value: str) -> str:
+        return validate_safe_text(
+            value,
+            field_name="岗位描述",
+            max_chars=settings.max_job_description_chars,
+            strip=True,
+        )
+
 
 class InterviewEvaluateRequest(BaseModel):
     interview_type: str = Field(default="AI 应用开发实习面试")
@@ -26,6 +48,36 @@ class InterviewEvaluateRequest(BaseModel):
     question_index: int = Field(default=1, ge=1)
     question: str
     user_answer: str
+
+    @field_validator("interview_type")
+    @classmethod
+    def validate_interview_type(cls, value: str) -> str:
+        return InterviewQuestionRequest.validate_interview_type(value)
+
+    @field_validator("job_description")
+    @classmethod
+    def validate_job_description(cls, value: str) -> str:
+        return InterviewQuestionRequest.validate_job_description(value)
+
+    @field_validator("question")
+    @classmethod
+    def validate_question(cls, value: str) -> str:
+        return validate_safe_text(
+            value,
+            field_name="面试问题",
+            max_chars=settings.max_chat_input_chars,
+            strip=True,
+        )
+
+    @field_validator("user_answer")
+    @classmethod
+    def validate_user_answer(cls, value: str) -> str:
+        return validate_safe_text(
+            value,
+            field_name="面试回答",
+            max_chars=settings.max_interview_answer_chars,
+            strip=True,
+        )
 
 
 @router.post(

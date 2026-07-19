@@ -1,4 +1,3 @@
-from pathlib import Path
 
 from fastapi import HTTPException
 from sqlalchemy import func
@@ -22,6 +21,10 @@ from app.db.models import (
 from app.services.admin_audit_service import add_admin_audit_log
 from app.services.usage_service import get_user_usage
 from app.services.vector_store import delete_user_vectors
+from app.services.upload_security import (
+    UploadSecurityError,
+    resolve_owned_storage_path,
+)
 
 
 class AdminServiceError(Exception):
@@ -254,19 +257,33 @@ def delete_user_and_data(
     counts = _user_resource_counts(db, user.id)
     failures = []
     files = db.query(FileRecord).filter(FileRecord.user_id == user.id).all()
-    try:
-        delete_user_vectors(user.id)
-    except Exception as exc:
-        failures.append(
-            {
-                "resource_type": "vector",
-                "resource_id": str(user.id),
-                "error_type": type(exc).__name__,
-            }
-        )
+    resolved_files = []
+    for record in files:
+        try:
+            resolved_files.append(
+                (record, resolve_owned_storage_path(user.id, record.file_path))
+            )
+        except UploadSecurityError as exc:
+            failures.append(
+                {
+                    "resource_type": "file",
+                    "resource_id": record.file_id,
+                    "error_type": exc.error_code,
+                }
+            )
     if not failures:
-        for record in files:
-            file_path = Path(record.file_path)
+        try:
+            delete_user_vectors(user.id)
+        except Exception as exc:
+            failures.append(
+                {
+                    "resource_type": "vector",
+                    "resource_id": str(user.id),
+                    "error_type": type(exc).__name__,
+                }
+            )
+    if not failures:
+        for record, file_path in resolved_files:
             if file_path.exists():
                 try:
                     file_path.unlink()

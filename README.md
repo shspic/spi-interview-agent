@@ -235,7 +235,7 @@ pip install -r requirements.txt
 启动后端：
 
 ```powershell
-uvicorn app.main:app --reload
+uvicorn app.main:app --reload --no-server-header
 ```
 
 后端地址：
@@ -402,3 +402,9 @@ cd D:\spir\NO1_agent\backend
 每次运行的 JSON、case 明细和 Markdown 报告位于 `backend/evals/results/<运行时间>/`，详细指标、门槛和首次结果参见 [自动化评估基线](docs/EVALUATION_BASELINE.md)，证据所有权与 Prompt Injection 防护参见 [Agent 安全边界](docs/AGENT_SECURITY.md)，候选池与确定性重排参见 [检索候选与排序](docs/RETRIEVAL_RANKING.md)，真实 BGE/Chroma 的隔离测量参见 [真实 Embedding 检索校准](docs/RETRIEVAL_CALIBRATION.md)，排序与证据接受、validation/holdout 纪律参见 [检索证据充分性](docs/RETRIEVAL_CONFIDENCE.md)。
 
 生产 Evidence 检索现已支持确定性 Query Analysis、最多两个查询变体和三次 Chroma 查询、RRF 候选融合、可信文件身份辅助、互补证据集合选择及集合级 `sufficient`。`/knowledge/search` 仍保持近似搜索展示语义。coverage final holdout 的方案 D Recall@3 为 81.48%、MRR 89.81%，安全指标为 0，但完整目标评估未通过；设计和完整失败项见 [检索查询分析与证据集合](docs/RETRIEVAL_EVIDENCE_SETS.md)。
+
+---
+
+## 13. API 与上传安全
+
+朋友试用前的突发限流、可信代理、请求体与字段限制、`.md/.txt/.pdf` 上传白名单、流式大小校验、用户存储预留、下载隔离、CORS、安全响应头、请求 ID、错误与日志脱敏配置见 [API 与上传安全边界](docs/API_AND_UPLOAD_SECURITY.md)。真实 Secret 只写入未纳入 Git 的 `backend/.env`；安全配置示例见 `backend/.env.example`。

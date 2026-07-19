@@ -1,5 +1,4 @@
 from datetime import datetime
-from pathlib import Path
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -16,6 +15,10 @@ from app.db.models import (
     UserDataDeletionLog,
 )
 from app.services.vector_store import delete_user_vectors
+from app.services.upload_security import (
+    UploadSecurityError,
+    resolve_owned_storage_path,
+)
 
 USER_DATA_CLEANUP_CONFIRMATION = "DELETE_MY_DATA"
 RETAINED_RESOURCES = [
@@ -93,21 +96,36 @@ def cleanup_user_business_data(db: Session, user_id: int) -> dict:
     counts = _resource_counts(db, user_id)
     files = db.query(FileRecord).filter(FileRecord.user_id == user_id).all()
     failures = []
+    resolved_files = []
 
-    try:
-        delete_user_vectors(user_id)
-    except Exception as exc:
-        failures.append(
-            {
-                "resource_type": "vector",
-                "resource_id": str(user_id),
-                "error_type": type(exc).__name__,
-            }
-        )
+    for record in files:
+        try:
+            resolved_files.append(
+                (record, resolve_owned_storage_path(user_id, record.file_path))
+            )
+        except UploadSecurityError as exc:
+            failures.append(
+                {
+                    "resource_type": "file",
+                    "resource_id": record.file_id,
+                    "error_type": exc.error_code,
+                }
+            )
 
     if not failures:
-        for record in files:
-            file_path = Path(record.file_path)
+        try:
+            delete_user_vectors(user_id)
+        except Exception as exc:
+            failures.append(
+                {
+                    "resource_type": "vector",
+                    "resource_id": str(user_id),
+                    "error_type": type(exc).__name__,
+                }
+            )
+
+    if not failures:
+        for record, file_path in resolved_files:
             if not file_path.exists():
                 continue
             try:

@@ -11,6 +11,7 @@ from app.services.account_data_service import (
     preview_user_data_cleanup,
     record_rejected_cleanup,
 )
+from app.services.rate_limit_service import enforce_user_rate_limit
 
 router = APIRouter()
 
@@ -30,6 +31,7 @@ def cleanup_data(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    enforce_user_rate_limit(db, current_user.id, "password_change")
     if request.confirm != USER_DATA_CLEANUP_CONFIRMATION:
         record_rejected_cleanup(db, current_user.id, "个人数据清理确认文本不匹配")
         raise HTTPException(status_code=422, detail="确认文本不匹配")
