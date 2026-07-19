@@ -6,8 +6,13 @@ from sqlalchemy.orm import Session
 from app.agents.schemas import EvidenceItem, EvidenceOutput
 from app.core.config import settings
 from app.db.models import FileRecord, InterviewSession, TargetJob, UserProfile
-from app.services.retrieval_ranking import candidate_pool_size, rerank_chunks
-from app.services.vector_store import DISTANCE_METRIC, search_candidate_chunks
+from app.services.retrieval_confidence import decide_retrieval_evidence
+from app.services.vector_store import DISTANCE_METRIC, search_evidence_candidates
+
+
+# 保留既有测试与调用注入点；实际实现已切换为证据候选检索。
+def search_candidate_chunks(query: str, user_id: int, candidate_k: int):
+    return search_evidence_candidates(query, user_id, candidate_k)
 
 
 logger = logging.getLogger(__name__)
@@ -175,15 +180,10 @@ def retrieve_interview_evidence(
     job_requirements = _load_job_requirements(db, user_id, interview_session)
     search_error = None
     try:
-        candidate_k = candidate_pool_size(
-            top_k,
-            settings.retrieval_candidate_multiplier,
-            settings.retrieval_max_candidates,
-        )
         search_result = search_candidate_chunks(
             query=query,
             user_id=user_id,
-            candidate_k=candidate_k,
+            candidate_k=top_k,
         )
         chunks = search_result.get("chunks", []) or []
     except Exception:
@@ -232,16 +232,27 @@ def retrieve_interview_evidence(
             }
         )
 
-    ranked_chunks, _ranking_stats = rerank_chunks(
+    decision = decide_retrieval_evidence(
         query,
         trusted_chunks,
         top_k=top_k,
-        distance_threshold=settings.evidence_max_distance,
+        high_confidence_distance=settings.evidence_max_distance,
         trusted_file_names={
             file_id: record.filename
             for file_id, record in records_by_id.items()
         },
         allowed_categories={"project", "resume"},
+    )
+    ranked_chunks = decision.accepted_candidates
+    logger.info(
+        "evidence_retrieval_decision user_id=%s session_id=%s sufficient=%s "
+        "reason=%s candidate_count=%s accepted_count=%s",
+        user_id,
+        session_id,
+        decision.sufficient,
+        decision.decision_reason,
+        len(trusted_chunks),
+        len(ranked_chunks),
     )
     project_evidence = []
     resume_evidence = []
@@ -271,21 +282,18 @@ def retrieve_interview_evidence(
             resume_evidence.append(item)
 
     if interview_session.mode == "deep_dive":
-        is_sufficient = bool(project_evidence)
+        is_sufficient = bool(project_evidence) and decision.sufficient
     else:
-        is_sufficient = bool(project_evidence or resume_evidence)
+        is_sufficient = bool(project_evidence or resume_evidence) and decision.sufficient
 
     if is_sufficient:
-        reason = "存在距离阈值内的当前用户简历或项目证据"
+        reason = "存在经安全校验且足以支持回答的当前用户证据"
     elif search_error:
         reason = search_error
     elif not owned_chunks:
         reason = "当前用户知识库为空或没有可检索片段"
     elif best_distance is not None:
-        reason = (
-            "检索片段相关性不足，最佳平方 L2 距离为 "
-            f"{best_distance:.4f}，阈值为 {settings.evidence_max_distance:.4f}"
-        )
+        reason = "当前用户候选片段不足以作为可靠事实证据"
     else:
         reason = "没有可用于证明用户经历的可靠证据"
 

@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "frozen_at": "2026-07-19T23:27:21+08:00",
+  "baseline_git_commit": "54263a3c6d558fef362782f48a4212e1b71f0f40",
+  "selected_strategy": "confidence_adaptive_pool",
+  "final_holdout_frozen": true,
+  "dataset_manifest_sha256": "e1424cfe482310840529f1a307809222bebfff2cdff5fabdbd9b27a3cbe29982",
+  "production_files": [
+    {"path": ".env.example", "sha256": "8d39d37ff697ed4730421c95ca601eacbd7380138f3bd0966666b432b0adeb3a"},
+    {"path": "app/core/config.py", "sha256": "18994c91b335c5e37852acc2ca70e00291c9c4c4cdcc4fd13a6b27b11c4f005d"},
+    {"path": "app/services/retrieval_confidence.py", "sha256": "06b0a11094709ca6aa67dc8dc173bdf418527e9f9b6a83fd0c86b5f005ef3791"},
+    {"path": "app/services/vector_store.py", "sha256": "9d5151be15fbfc6fdfa595905bf96f4932df8f710e10d118f212be3ec68cfc77"},
+    {"path": "app/services/evidence_retrieval_service.py", "sha256": "bf5eeba07adc7c2bf1a3cdb06b8f3d8314c8ab138e52634a7d1ddf2b657d2349"},
+    {"path": "app/services/resume_evidence_service.py", "sha256": "43ba9328c0e9f065ae64c61bc5d9a5f14950f8f688c50b0551583b21c0e8ae4a"},
+    {"path": "app/services/trusted_retrieval_service.py", "sha256": "74f7c2e1af164cf0deaee878e86f25ec96a803832b16eced1f1f4fad23c3f506"},
+    {"path": "app/services/chat_service.py", "sha256": "00ca4825629ed053c1299430b4d318617dcd2cc4187784612664adabcd7f3e95"},
+    {"path": "app/services/job_service.py", "sha256": "c82774561178dfac3ce8b7d3d613b09445b42ebbe872bc48d2889ea2b4badf25"},
+    {"path": "app/services/agent_service.py", "sha256": "ad7daec14bf3e5c072d3a584c8c7c9530fba5c51f0f8e42a7220c4a0d6562ee1"},
+    {"path": "app/services/interview_service.py", "sha256": "f68e690db14e21267360d2a32324cba98fa47dd980349b959dfe5bce35b401fe"},
+    {"path": "app/api/interview.py", "sha256": "36a393b6af26107841c82467c7a83b5839214a56ad20e0132c937574ea83b975"}
+  ]
+}

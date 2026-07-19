@@ -12,7 +12,7 @@ from app.prompts.agent_prompt import (
     build_agent_router_messages,
 )
 from app.services.llm_service import LLMServiceError, chat_with_messages
-from app.services.vector_store import search_similar_chunks
+from app.services.trusted_retrieval_service import search_trusted_evidence
 from app.services.web_search_service import WebSearchServiceError, search_web
 
 
@@ -32,6 +32,7 @@ class AgentState(TypedDict, total=False):
     route_reason: str
     top_k: int
     max_web_results: int
+    db: Session
 
     local_context: str
     local_sources: list[dict]
@@ -212,9 +213,13 @@ def retrieve_local_node(state: AgentState) -> dict:
     question = state.get("question", "")
     user_id = state.get("user_id", 0)
     top_k = state.get("top_k", 5)
+    db = state.get("db")
+    if db is None:
+        raise AgentServiceError("本地证据检索缺少数据库会话")
 
     try:
-        search_result = search_similar_chunks(
+        search_result = search_trusted_evidence(
+            db,
             query=question,
             user_id=user_id,
             top_k=top_k,
@@ -366,6 +371,7 @@ def ask_agent(
                 "mode": mode,
                 "top_k": top_k,
                 "max_web_results": max_web_results,
+                "db": db,
             }
         )
     except AgentServiceError:

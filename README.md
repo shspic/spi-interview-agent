@@ -389,6 +389,9 @@ cd D:\spir\NO1_agent\backend
 .venv\Scripts\python.exe -m evals.run_retrieval_calibration --check-model-cache
 # 仅在本地缓存存在时人工显式运行；不会下载模型
 .venv\Scripts\python.exe -m evals.run_retrieval_calibration --real-embedding
+# 独立 validation；final holdout 仅在生产文件哈希冻结后运行
+.venv\Scripts\python.exe -m evals.run_retrieval_calibration --real-embedding --dataset validation
+.venv\Scripts\python.exe -m evals.run_retrieval_calibration --real-embedding --dataset holdout --final-holdout
 ```
 
-每次运行的 JSON、case 明细和 Markdown 报告位于 `backend/evals/results/<运行时间>/`，详细指标、门槛和首次结果参见 [自动化评估基线](docs/EVALUATION_BASELINE.md)，证据所有权与 Prompt Injection 防护参见 [Agent 安全边界](docs/AGENT_SECURITY.md)，候选池与确定性重排参见 [检索候选与排序](docs/RETRIEVAL_RANKING.md)，真实 BGE/Chroma 的隔离测量参见 [真实 Embedding 检索校准](docs/RETRIEVAL_CALIBRATION.md)。
+每次运行的 JSON、case 明细和 Markdown 报告位于 `backend/evals/results/<运行时间>/`，详细指标、门槛和首次结果参见 [自动化评估基线](docs/EVALUATION_BASELINE.md)，证据所有权与 Prompt Injection 防护参见 [Agent 安全边界](docs/AGENT_SECURITY.md)，候选池与确定性重排参见 [检索候选与排序](docs/RETRIEVAL_RANKING.md)，真实 BGE/Chroma 的隔离测量参见 [真实 Embedding 检索校准](docs/RETRIEVAL_CALIBRATION.md)，排序与证据接受、validation/holdout 纪律参见 [检索证据充分性](docs/RETRIEVAL_CONFIDENCE.md)。

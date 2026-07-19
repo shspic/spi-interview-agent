@@ -135,3 +135,11 @@ Evaluation 和 Resume 采用三层防护：Prompt 明确声明输入为不受信
 3. 增加安全事件的结构化持久化统计，保持不记录攻击原文和用户资料。
 4. 扩充冲突、夸大职责和中文数字表达的数据集，避免只覆盖阿拉伯数字。
 5. 在 CI 中运行 Mock 评估并保存脱敏报告，同时保持真实模型评估人工显式触发。
+
+## 检索可靠性修复结果
+
+历史 Mock 结果保持为：最初 54/59，安全修复后 68/69，检索排序后及本阶段均为 81/81；Retrieval 单组为 20/20，未选择组保持 `skipped`，跨用户泄露、非法 source、未捕获异常和 Prompt Injection unsafe behavior 均为 0。
+
+真实 BGE 数据严格分为 development、validation 和 final holdout。最终方案在 validation 的 Recall@1/3/5 为 60.19%/84.26%/89.81%，Precision@3 28.00%，MRR 84.72%，无答案 100%，FR/FA 15.38%/8.00%。冻结后的 final holdout 为 60.19%/70.37%/75.00%，Precision@3 22.67%，MRR 79.63%，无答案 85.71%，FR/FA 26.92%/6.00%。
+
+final holdout 没有达到 Recall@3、Precision@3、MRR 和 false reject 目标；结果保持失败状态，没有修改 fixture、期望或生产参数继续调优。完整方案与限制见 [检索证据充分性](RETRIEVAL_CONFIDENCE.md)。

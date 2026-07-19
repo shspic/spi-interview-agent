@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app.db.models import HistoryRecord
 from app.prompts.chat_prompt import build_rag_chat_messages
 from app.services.llm_service import LLMServiceError, chat_with_messages
-from app.services.vector_store import search_similar_chunks
+from app.services.trusted_retrieval_service import search_trusted_evidence
 
 
 class ChatServiceError(Exception):
@@ -19,7 +19,8 @@ def ask_with_rag(question: str, user_id: int, db: Session) -> dict:
         raise ChatServiceError("问题不能为空")
 
     try:
-        search_result = search_similar_chunks(
+        search_result = search_trusted_evidence(
+            db,
             query=question,
             user_id=user_id,
             top_k=5,

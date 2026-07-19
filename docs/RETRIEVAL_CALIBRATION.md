@@ -127,3 +127,16 @@ cd D:\spir\NO1_agent\backend
 - 没有 Cross Encoder 或额外 LLM reranker；这是刻意保持的当前生产链路边界。
 - Chroma collection 没有显式 distance metadata，当前版本默认返回平方 L2；依赖版本变化后应重新验证。
 - 本次只测本机已缓存的 BGE，不比较其他 Embedding 模型。
+
+## 独立验证与最终保留集结果
+
+检索可靠性阶段新增 25 query / 42 chunk 的 validation 和同规模 final holdout。两者均为全新虚构主题，包含 3 个虚构用户和 7 个无答案 query，并由 manifest SHA-256 固定。运行命令为：
+
+```powershell
+.venv\Scripts\python.exe -m evals.run_retrieval_calibration --real-embedding --dataset validation
+.venv\Scripts\python.exe -m evals.run_retrieval_calibration --real-embedding --dataset holdout --final-holdout
+```
+
+final holdout 只有在 `retrieval_production_freeze.json` 中的生产文件与数据 manifest 哈希全部匹配时才能运行，并生成 `final-holdout-marker.json`。最终置信度加受控扩展方案在 validation 的 Recall@1/3/5 为 60.19%/84.26%/89.81%，Precision@3 为 28.00%，MRR 为 84.72%，无答案准确率为 100%，FR/FA 为 15.38%/8.00%。
+
+冻结后的 final holdout 为 60.19%/70.37%/75.00%，Precision@3 22.67%，MRR 79.63%，无答案准确率 85.71%，FR/FA 26.92%/6.00%。泄露、非法 source 和排序不稳定均为 0。该结果未达到全部目标，且未用于再次调参。充分性设计、调用方策略和失败分析见 [检索证据充分性](RETRIEVAL_CONFIDENCE.md)。

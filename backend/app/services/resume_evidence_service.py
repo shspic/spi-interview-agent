@@ -4,7 +4,12 @@ from app.agents.schemas import EvidenceItem, EvidenceOutput
 from app.core.config import settings
 from app.db.models import FileRecord, InterviewSession, InterviewTurn, TargetJob
 from app.services.evidence_retrieval_service import load_profile_evidence
-from app.services.vector_store import DISTANCE_METRIC, search_similar_chunks
+from app.services.retrieval_confidence import decide_retrieval_evidence
+from app.services.vector_store import DISTANCE_METRIC, search_evidence_candidates
+
+
+# 保留既有测试注入点，避免测试为了内部重命名而改变。
+search_similar_chunks = search_evidence_candidates
 
 
 def retrieve_resume_evidence(
@@ -48,13 +53,12 @@ def retrieve_resume_evidence(
     project_evidence = []
     resume_evidence = []
     distances = []
+    trusted_chunks = []
     for chunk in chunks:
         distance = chunk.get("distance")
         if not isinstance(distance, (int, float)):
             continue
         distances.append(float(distance))
-        if float(distance) > settings.evidence_max_distance:
-            continue
         metadata = chunk.get("metadata") or {}
         file_id = str(metadata.get("file_id") or "")
         if file_id in project_ids:
@@ -64,13 +68,49 @@ def retrieve_resume_evidence(
         else:
             continue
         record = file_records[file_id]
+        chunk_index = metadata.get("chunk_index")
+        if (
+            not isinstance(chunk_index, int)
+            or isinstance(chunk_index, bool)
+            or chunk_index < 0
+        ):
+            continue
+        trusted_chunks.append(
+            {
+                "content": chunk.get("content"),
+                "distance": distance,
+                "metadata": {
+                    "user_id": user_id,
+                    "file_id": file_id,
+                    "chunk_index": chunk_index,
+                    "category": evidence_type,
+                },
+            }
+        )
+
+    evidence_query = " ".join(part for part in query_parts if part)
+    decision = decide_retrieval_evidence(
+        evidence_query,
+        trusted_chunks,
+        top_k=top_k,
+        high_confidence_distance=settings.evidence_max_distance,
+        trusted_file_names={
+            file_id: record.filename for file_id, record in file_records.items()
+        },
+        allowed_categories={"project", "resume"},
+    )
+    for chunk in decision.accepted_candidates:
+        metadata = chunk.get("metadata") or {}
+        file_id = str(metadata.get("file_id") or "")
+        evidence_type = str(metadata.get("category") or "")
+        record = file_records[file_id]
         item = EvidenceItem(
             evidence_type=evidence_type,
             source_id=_source_id(file_id, metadata.get("chunk_index")),
-            filename=metadata.get("filename") or record.filename,
+            filename=record.filename,
             chunk_index=metadata.get("chunk_index"),
             content=str(chunk.get("content") or "")[:2000],
-            distance=float(distance),
+            distance=float(chunk["distance"]),
         )
         _append_unique(
             project_evidence if evidence_type == "project" else resume_evidence,

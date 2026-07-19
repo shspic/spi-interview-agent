@@ -1,0 +1,117 @@
+import logging
+from typing import Any
+
+from sqlalchemy.orm import Session
+
+from app.core.config import settings
+from app.db.models import FileRecord
+from app.services.retrieval_confidence import decide_retrieval_evidence
+from app.services.vector_store import DISTANCE_METRIC, search_evidence_candidates
+
+
+logger = logging.getLogger(__name__)
+
+
+def search_trusted_evidence(
+    db: Session,
+    *,
+    query: str,
+    user_id: int,
+    top_k: int,
+) -> dict[str, Any]:
+    """检索并接受可进入 Agent Prompt 的当前用户事实证据。"""
+    candidate_result = search_evidence_candidates(query, user_id, top_k)
+    candidates = candidate_result.get("chunks", []) or []
+    file_ids = sorted(
+        {
+            metadata["file_id"]
+            for chunk in candidates
+            if isinstance((metadata := chunk.get("metadata")), dict)
+            and metadata.get("user_id") == user_id
+            and isinstance(metadata.get("file_id"), str)
+            and metadata["file_id"].strip()
+            and len(metadata["file_id"]) <= 255
+        }
+    )
+    records = (
+        db.query(FileRecord)
+        .filter(
+            FileRecord.user_id == user_id,
+            FileRecord.file_id.in_(file_ids),
+        )
+        .all()
+        if file_ids
+        else []
+    )
+    records_by_id = {record.file_id: record for record in records}
+    trusted_chunks = []
+    ownership_filtered = 0
+    category_filtered = 0
+    for chunk in candidates:
+        metadata = chunk.get("metadata") or {}
+        file_id = metadata.get("file_id")
+        chunk_index = metadata.get("chunk_index")
+        record = records_by_id.get(file_id)
+        if record is None:
+            ownership_filtered += 1
+            continue
+        if record.category not in {"project", "resume"}:
+            category_filtered += 1
+            continue
+        if (
+            not isinstance(chunk_index, int)
+            or isinstance(chunk_index, bool)
+            or chunk_index < 0
+        ):
+            ownership_filtered += 1
+            continue
+        trusted_chunks.append(
+            {
+                "content": chunk.get("content"),
+                "distance": chunk.get("distance"),
+                "metadata": {
+                    "user_id": user_id,
+                    "file_id": record.file_id,
+                    "filename": record.filename,
+                    "file_type": record.file_type,
+                    "category": record.category,
+                    "chunk_index": chunk_index,
+                },
+            }
+        )
+
+    decision = decide_retrieval_evidence(
+        query,
+        trusted_chunks,
+        top_k=top_k,
+        high_confidence_distance=settings.evidence_max_distance,
+        trusted_file_names={
+            file_id: record.filename for file_id, record in records_by_id.items()
+        },
+        allowed_categories={"project", "resume"},
+    )
+    logger.info(
+        "trusted_retrieval_decision user_id=%s sufficient=%s reason=%s "
+        "candidate_count=%s accepted_count=%s",
+        user_id,
+        decision.sufficient,
+        decision.decision_reason,
+        len(trusted_chunks),
+        len(decision.accepted_candidates),
+    )
+    return {
+        "query": query,
+        "top_k": top_k,
+        "distance_metric": DISTANCE_METRIC,
+        "chunks": decision.accepted_candidates,
+        "sufficient": decision.sufficient,
+        "confidence": decision.confidence,
+        "decision_reason": decision.decision_reason,
+        "retrieval_stats": {
+            **candidate_result.get("retrieval_stats", {}),
+            **decision.filtered_counts,
+            "ownership_filtered_count": ownership_filtered,
+            "trusted_category_filtered_count": category_filtered,
+            "file_record_batch_query_count": int(bool(file_ids)),
+        },
+    }

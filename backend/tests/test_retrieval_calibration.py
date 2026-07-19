@@ -1,4 +1,5 @@
 import json
+import hashlib
 import socket
 import sqlite3
 from pathlib import Path
@@ -12,8 +13,11 @@ from evals.retrieval_calibration import (
     _parameter_comparison,
     _precision_at_k,
     _strategy_metrics,
+    _target_assessment,
     _verify_owned_candidates,
     load_dataset,
+    load_frozen_dataset,
+    verify_production_freeze,
 )
 
 
@@ -51,6 +55,112 @@ def test_calibration_dataset_is_synthetic_and_has_required_scale():
         "category",
         "empty",
     } <= tags
+
+
+def test_validation_and_holdout_datasets_match_frozen_manifest():
+    development, development_entry = load_frozen_dataset("development")
+    validation, validation_entry = load_frozen_dataset("validation")
+    holdout, holdout_entry = load_frozen_dataset("holdout")
+    assert (len(validation["queries"]), len(validation["chunks"])) == (25, 42)
+    assert (len(holdout["queries"]), len(holdout["chunks"])) == (25, 42)
+    case_id_sets = [
+        {item["id"] for item in dataset["queries"]}
+        for dataset in (development, validation, holdout)
+    ]
+    assert not (case_id_sets[0] & case_id_sets[1])
+    assert not (case_id_sets[0] & case_id_sets[2])
+    assert not (case_id_sets[1] & case_id_sets[2])
+    assert development_entry["sha256"] == hashlib.sha256(
+        retrieval_calibration.DATASET_PATH.read_bytes()
+    ).hexdigest()
+    assert validation_entry["role"] == "validation_selection"
+    assert holdout_entry["may_influence_tuning"] is False
+
+
+def test_frozen_dataset_hash_mismatch_fails_closed(monkeypatch, tmp_path):
+    tampered = tmp_path / "validation.json"
+    tampered.write_bytes(retrieval_calibration.VALIDATION_DATASET_PATH.read_bytes() + b" ")
+    monkeypatch.setitem(retrieval_calibration.DATASET_PATHS, "validation", tampered)
+    try:
+        with np.testing.assert_raises_regex(ValueError, "SHA-256"):
+            load_frozen_dataset("validation")
+    finally:
+        monkeypatch.setitem(
+            retrieval_calibration.DATASET_PATHS,
+            "validation",
+            retrieval_calibration.VALIDATION_DATASET_PATH,
+        )
+
+
+def test_invalid_expected_structure_is_rejected(tmp_path):
+    payload = json.loads(retrieval_calibration.VALIDATION_DATASET_PATH.read_text(encoding="utf-8"))
+    payload["queries"][0]["relevant_source_ids"] = "not-a-list"
+    path = tmp_path / "invalid.json"
+    path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    with np.testing.assert_raises_regex(ValueError, "relevant_source_ids"):
+        load_dataset(path)
+
+
+def test_production_freeze_detects_file_changes(monkeypatch, tmp_path):
+    backend_root = Path(retrieval_calibration.__file__).resolve().parents[1]
+    target = backend_root / "tests" / "test_retrieval_calibration.py"
+    payload = {
+        "final_holdout_frozen": True,
+        "dataset_manifest_sha256": hashlib.sha256(
+            retrieval_calibration.DATASET_MANIFEST_PATH.read_bytes()
+        ).hexdigest(),
+        "production_files": [
+            {"path": "tests/test_retrieval_calibration.py", "sha256": "0" * 64}
+        ],
+    }
+    marker = tmp_path / "freeze.json"
+    marker.write_text(json.dumps(payload), encoding="utf-8")
+    with np.testing.assert_raises_regex(ValueError, "已变化"):
+        verify_production_freeze(marker)
+    payload["production_files"][0]["sha256"] = hashlib.sha256(target.read_bytes()).hexdigest()
+    marker.write_text(json.dumps(payload), encoding="utf-8")
+    assert verify_production_freeze(marker)["final_holdout_frozen"] is True
+
+
+def test_holdout_requires_baseline_or_frozen_final(monkeypatch):
+    from evals import run_retrieval_calibration
+
+    with np.testing.assert_raises(SystemExit):
+        run_retrieval_calibration.main(["--real-embedding", "--dataset", "holdout"])
+    monkeypatch.setattr(
+        retrieval_calibration,
+        "verify_production_freeze",
+        lambda: {"freeze_sha256": "freeze-hash"},
+    )
+    observed = {}
+
+    def fake_run(*args, **kwargs):
+        observed.update(kwargs)
+        return ({"status": "completed", "query_count": 25, "chunk_count": 42}, Path("result"))
+
+    monkeypatch.setattr(retrieval_calibration, "run_real_calibration", fake_run)
+    assert run_retrieval_calibration.main(
+        ["--real-embedding", "--dataset", "holdout", "--final-holdout"]
+    ) == 0
+    assert observed["evaluation_stage"] == "final_frozen_holdout"
+    assert observed["suppress_case_details"] is False
+    assert observed["final_holdout_frozen"] is True
+
+
+def test_failed_holdout_targets_are_not_reported_as_passed():
+    assessment = _target_assessment(
+        {
+            "no_answer_accuracy": 1.0,
+            "false_reject_rate": 0.25,
+            "false_accept_rate": 0.05,
+            "recall_at_3": 0.70,
+            "precision_at_3": 0.20,
+            "mrr": 0.79,
+        },
+        final_holdout_frozen=True,
+    )
+    assert assessment["passed"] is False
+    assert assessment["checks"]["recall_at_3_gte_0_80"] is False
 
 
 def test_default_cli_does_not_run_real_calibration(monkeypatch, capsys):

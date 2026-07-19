@@ -3,6 +3,7 @@ from pydantic import ValidationError
 
 from app.core.config import Settings
 from app.services import vector_store
+from app.services.retrieval_confidence import decide_retrieval_evidence
 from app.services.retrieval_ranking import (
     candidate_pool_size,
     extract_terms,
@@ -243,3 +244,106 @@ def test_distance_and_category_filters_run_before_final_selection():
     assert ranked == ["project"]
     assert stats.distance_filtered_count == 1
     assert stats.category_filtered_count == 1
+
+
+def _decide(query, chunks, top_k=3):
+    return decide_retrieval_evidence(
+        query,
+        chunks,
+        top_k=top_k,
+        high_confidence_distance=0.8,
+        allowed_categories={"project", "resume"},
+    )
+
+
+def test_no_reliable_evidence_is_insufficient():
+    decision = _decide(
+        "项目如何实现 GraphQL federation",
+        [_chunk("FastAPI REST 接口", 0.4, "unrelated")],
+    )
+    assert decision.sufficient is False
+    assert decision.accepted_candidates == []
+    assert decision.decision_reason == "rejected_no_answer"
+
+
+def test_requested_number_must_be_supported_by_evidence():
+    decision = _decide(
+        "接口延迟是否低于 12 毫秒",
+        [_chunk("接口延迟经过了测试，但材料没有记录具体数值", 0.3, "missing")],
+    )
+    assert decision.sufficient is False
+    assert decision.candidate_decisions[0].reason == "rejected_numeric_mismatch"
+
+
+def test_explicit_negative_evidence_can_be_accepted():
+    decision = _decide(
+        "项目是否使用 Redis",
+        [_chunk("当前版本明确未使用 Redis。", 0.9, "negative")],
+    )
+    assert decision.sufficient is True
+    assert decision.candidate_decisions[0].reason == "accepted_borderline_with_support"
+
+
+def test_keyword_stuffing_cannot_supply_evidence():
+    decision = _decide(
+        "项目如何实现 GraphQL federation",
+        [
+            _chunk(
+                "GraphQL Redis Kafka Kubernetes FastAPI ChromaDB 技术词索引。",
+                0.5,
+                "terms",
+            )
+        ],
+    )
+    assert decision.sufficient is False
+    assert decision.candidate_decisions[0].reason == "rejected_keyword_stuffing"
+
+
+def test_borderline_candidate_needs_additional_support():
+    rejected = _decide(
+        "设备异常怎样通知值班人员",
+        [_chunk("设备资料概览", 0.9, "weak")],
+    )
+    accepted = _decide(
+        "设备异常怎样通知值班人员",
+        [_chunk("设备异常通过告警通知值班人员。", 0.9, "strong")],
+    )
+    assert rejected.sufficient is False
+    assert accepted.sufficient is True
+
+
+def test_candidate_beyond_hard_boundary_is_always_rejected():
+    decision = _decide(
+        "FastAPI 接口",
+        [_chunk("FastAPI 接口 FastAPI 接口", 1.16, "far")],
+    )
+    assert decision.sufficient is False
+
+
+def test_evidence_candidate_pool_expands_at_most_once(monkeypatch):
+    collection = _Collection(
+        [_chunk(f"项目证据 {index}", 0.4 + index / 100, f"file-{index}") for index in range(30)]
+    )
+    monkeypatch.setattr(vector_store, "get_collection", lambda: collection)
+    monkeypatch.setattr(vector_store, "get_embedding_model", lambda: _EmbeddingModel())
+    monkeypatch.setattr(vector_store.settings, "retrieval_candidate_multiplier", 3)
+    monkeypatch.setattr(vector_store.settings, "retrieval_max_candidates", 40)
+
+    result = vector_store.search_evidence_candidates("项目证据", 1, top_k=3)
+
+    assert [item["n_results"] for item in collection.calls] == [9, 18]
+    assert result["retrieval_stats"]["chroma_query_count"] == 2
+    assert result["retrieval_stats"]["adaptive_expanded"] is True
+
+
+def test_evidence_candidate_pool_does_not_expand_empty_or_short_results(monkeypatch):
+    collection = _Collection([])
+    monkeypatch.setattr(vector_store, "get_collection", lambda: collection)
+    monkeypatch.setattr(vector_store, "get_embedding_model", lambda: _EmbeddingModel())
+    monkeypatch.setattr(vector_store.settings, "retrieval_candidate_multiplier", 3)
+    monkeypatch.setattr(vector_store.settings, "retrieval_max_candidates", 40)
+
+    result = vector_store.search_evidence_candidates("项目证据", 1, top_k=3)
+
+    assert len(collection.calls) == 1
+    assert result["retrieval_stats"]["chroma_query_count"] == 1

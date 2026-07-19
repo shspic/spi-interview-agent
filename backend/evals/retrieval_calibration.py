@@ -1,4 +1,5 @@
 import json
+import hashlib
 import math
 import os
 import socket
@@ -19,8 +20,17 @@ from evals.reporters import create_result_dir, write_json
 MODEL_ID = os.getenv("EMBEDDING_MODEL_NAME", "BAAI/bge-small-zh-v1.5")
 DISTANCE_THRESHOLD = float(os.getenv("EVIDENCE_MAX_DISTANCE", "0.8"))
 CANDIDATE_MULTIPLIER = int(os.getenv("RETRIEVAL_CANDIDATE_MULTIPLIER", "3"))
-MAX_CANDIDATES = int(os.getenv("RETRIEVAL_MAX_CANDIDATES", "20"))
+MAX_CANDIDATES = int(os.getenv("RETRIEVAL_MAX_CANDIDATES", "40"))
 DATASET_PATH = Path(__file__).with_name("retrieval_calibration_cases.json")
+VALIDATION_DATASET_PATH = Path(__file__).with_name("retrieval_validation_cases.json")
+HOLDOUT_DATASET_PATH = Path(__file__).with_name("retrieval_holdout_cases.json")
+DATASET_MANIFEST_PATH = Path(__file__).with_name("retrieval_validation_manifest.json")
+PRODUCTION_FREEZE_PATH = Path(__file__).with_name("retrieval_production_freeze.json")
+DATASET_PATHS = {
+    "development": DATASET_PATH,
+    "validation": VALIDATION_DATASET_PATH,
+    "holdout": HOLDOUT_DATASET_PATH,
+}
 
 
 def configure_offline_environment() -> None:
@@ -97,17 +107,96 @@ def load_dataset(path: Path = DATASET_PATH) -> dict[str, Any]:
     if not isinstance(queries, list) or not 25 <= len(queries) <= 40:
         raise ValueError("真实校准 query 数量必须在 25 到 40 之间")
     source_ids = set()
+    source_users = {}
     for chunk in chunks:
         source_id = _source_id(chunk)
         if source_id in source_ids:
             raise ValueError(f"重复 source_id：{source_id}")
         source_ids.add(source_id)
+        source_users[source_id] = chunk.get("user_id")
+    case_ids = set()
     for case in queries:
-        expected = set(case.get("relevant_source_ids", []))
-        obvious = set(case.get("obvious_irrelevant_source_ids", []))
+        case_id = case.get("id")
+        if not isinstance(case_id, str) or not case_id or case_id in case_ids:
+            raise ValueError("校准 case id 必须是非空且唯一的字符串")
+        case_ids.add(case_id)
+        if not isinstance(case.get("query"), str) or not case["query"].strip():
+            raise ValueError(f"case query 非法：{case_id}")
+        if not isinstance(case.get("user_id"), int) or isinstance(case.get("user_id"), bool):
+            raise ValueError(f"case user_id 非法：{case_id}")
+        if not isinstance(case.get("relevant_source_ids"), list):
+            raise ValueError(f"case relevant_source_ids 非法：{case_id}")
+        if not isinstance(case.get("obvious_irrelevant_source_ids"), list):
+            raise ValueError(f"case obvious_irrelevant_source_ids 非法：{case_id}")
+        if not isinstance(case.get("tags"), list) or not all(
+            isinstance(item, str) and item for item in case["tags"]
+        ):
+            raise ValueError(f"case tags 非法：{case_id}")
+        expected = set(case["relevant_source_ids"])
+        obvious = set(case["obvious_irrelevant_source_ids"])
+        if len(expected) != len(case["relevant_source_ids"]) or len(obvious) != len(
+            case["obvious_irrelevant_source_ids"]
+        ):
+            raise ValueError(f"case source_id 不得重复：{case_id}")
+        if expected & obvious:
+            raise ValueError(f"case 相关与明显无关 source_id 不得重叠：{case_id}")
         if not expected <= source_ids or not obvious <= source_ids:
             raise ValueError(f"case 引用了不存在的 source_id：{case.get('id')}")
+        if any(source_users[item] != case["user_id"] for item in expected):
+            raise ValueError(f"case 相关 source_id 不得属于其他用户：{case_id}")
     return payload
+
+
+def load_frozen_dataset(
+    dataset_name: str,
+    manifest_path: Path = DATASET_MANIFEST_PATH,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    if dataset_name not in DATASET_PATHS:
+        raise ValueError(f"未知检索数据集：{dataset_name}")
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest_key = "final_holdout" if dataset_name == "holdout" else dataset_name
+    entry = manifest["datasets"][manifest_key]
+    dataset_path = DATASET_PATHS[dataset_name]
+    digest = hashlib.sha256(dataset_path.read_bytes()).hexdigest()
+    if digest != entry["sha256"]:
+        raise ValueError(f"{dataset_name} 数据集 SHA-256 与 manifest 不一致")
+    dataset = load_dataset(dataset_path)
+    if len(dataset["queries"]) != entry["query_count"]:
+        raise ValueError(f"{dataset_name} query 数量与 manifest 不一致")
+    if len(dataset["chunks"]) != entry["chunk_count"]:
+        raise ValueError(f"{dataset_name} chunk 数量与 manifest 不一致")
+    if len({item["user_id"] for item in dataset["chunks"]}) != entry["user_count"]:
+        raise ValueError(f"{dataset_name} 用户数量与 manifest 不一致")
+    if sum(not item["relevant_source_ids"] for item in dataset["queries"]) != entry["no_answer_count"]:
+        raise ValueError(f"{dataset_name} 无答案数量与 manifest 不一致")
+    return dataset, {**entry, "dataset_name": dataset_name, "sha256": digest}
+
+
+def verify_production_freeze(
+    path: Path = PRODUCTION_FREEZE_PATH,
+) -> dict[str, Any]:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if payload.get("final_holdout_frozen") is not True:
+        raise ValueError("生产检索逻辑尚未冻结")
+    backend_root = Path(__file__).resolve().parents[1]
+    for item in payload.get("production_files", []):
+        relative_path = item.get("path")
+        expected = item.get("sha256")
+        if not isinstance(relative_path, str) or not isinstance(expected, str):
+            raise ValueError("生产冻结文件记录非法")
+        target = (backend_root / relative_path).resolve()
+        if backend_root.resolve() not in target.parents:
+            raise ValueError("生产冻结文件不得超出 backend")
+        actual = hashlib.sha256(target.read_bytes()).hexdigest()
+        if actual != expected:
+            raise ValueError(f"生产冻结文件已变化：{relative_path}")
+    manifest_digest = hashlib.sha256(DATASET_MANIFEST_PATH.read_bytes()).hexdigest()
+    if manifest_digest != payload.get("dataset_manifest_sha256"):
+        raise ValueError("数据集 manifest 在生产冻结后发生变化")
+    return {
+        **payload,
+        "freeze_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+    }
 
 
 def _source_id(chunk: dict[str, Any]) -> str:
@@ -266,6 +355,60 @@ def _production_rank(
     return ranked, stats.as_dict()
 
 
+def _dual_threshold_rank(
+    query: str,
+    chunks: list[dict[str, Any]],
+    *,
+    top_k: int,
+    trusted_file_names: dict[str, str],
+) -> list[dict[str, Any]]:
+    from app.services.retrieval_confidence import HARD_REJECT_DISTANCE, STRONG_LEXICAL
+    from app.services.retrieval_ranking import extract_terms, normalize_text
+
+    query_terms = extract_terms(query)
+    normalized_query = normalize_text(query)
+    eligible = []
+    for chunk in chunks:
+        metadata = chunk.get("metadata") or {}
+        if metadata.get("category") not in {"project", "resume"}:
+            continue
+        distance = float(chunk["distance"])
+        if distance > HARD_REJECT_DISTANCE:
+            continue
+        content = str(chunk.get("content") or "")
+        content_coverage = (
+            len(query_terms & extract_terms(content)) / len(query_terms)
+            if query_terms
+            else 0.0
+        )
+        file_id = str(metadata.get("file_id") or "")
+        filename_coverage = (
+            len(query_terms & extract_terms(trusted_file_names.get(file_id, "")))
+            / len(query_terms)
+            if query_terms
+            else 0.0
+        )
+        exact_phrase = float(
+            bool(normalized_query) and normalized_query in normalize_text(content)
+        )
+        lexical_score = (
+            0.75 * content_coverage
+            + 0.15 * exact_phrase
+            + 0.10 * filename_coverage
+        )
+        if distance <= DISTANCE_THRESHOLD or lexical_score >= STRONG_LEXICAL:
+            eligible.append(chunk)
+    ranked, _stats = _production_rank(
+        query,
+        eligible,
+        top_k=top_k,
+        distance_threshold=HARD_REJECT_DISTANCE,
+        trusted_file_names=trusted_file_names,
+        allowed_categories={"project", "resume"},
+    )
+    return ranked
+
+
 def _create_sqlite(
     path: Path,
     chunks: list[dict[str, Any]],
@@ -381,6 +524,62 @@ def _strategy_metrics(
     }
 
 
+def _reliability_metrics(
+    case_rows: list[dict[str, Any]],
+    strategy: str,
+) -> dict[str, Any]:
+    base = _strategy_metrics(case_rows, strategy)
+    relevant_count = sum(len(row["relevant_source_ids"]) for row in case_rows)
+    obvious_count = sum(len(row["obvious_irrelevant_source_ids"]) for row in case_rows)
+    false_rejects = sum(
+        len(set(row["relevant_source_ids"]) - set(row["rankings"][strategy]))
+        for row in case_rows
+    )
+    false_accepts = sum(
+        len(set(row["obvious_irrelevant_source_ids"]) & set(row["rankings"][strategy]))
+        for row in case_rows
+    )
+    candidate_counts = [row["strategy_candidate_counts"][strategy] for row in case_rows]
+    return {
+        **base,
+        "no_answer_accuracy": base["empty_result_accuracy"],
+        "false_reject_count": false_rejects,
+        "false_reject_rate": false_rejects / relevant_count if relevant_count else 0.0,
+        "false_accept_count": false_accepts,
+        "false_accept_rate": false_accepts / obvious_count if obvious_count else 0.0,
+        "candidate_truncation_count": sum(
+            row["strategy_candidate_truncated"][strategy] for row in case_rows
+        ),
+        "average_candidate_count": mean(candidate_counts),
+        "candidate_count_p50": _nearest_rank_percentile(candidate_counts, 50),
+        "candidate_count_p95": _nearest_rank_percentile(candidate_counts, 95),
+        "adaptive_expansion_count": sum(
+            row["strategy_adaptive_expanded"].get(strategy, False)
+            for row in case_rows
+        ),
+    }
+
+
+def _target_assessment(
+    metrics: dict[str, Any],
+    *,
+    final_holdout_frozen: bool,
+) -> dict[str, Any]:
+    checks = {
+        "no_answer_accuracy_gte_0_80": metrics["no_answer_accuracy"] >= 0.80,
+        "false_reject_rate_lte_0_20": metrics["false_reject_rate"] <= 0.20,
+        "false_accept_rate_lte_0_12": metrics["false_accept_rate"] <= 0.12,
+        "recall_at_3_gte_0_80": metrics["recall_at_3"] >= 0.80,
+        "precision_at_3_gte_0_35": metrics["precision_at_3"] >= 0.35,
+        "mrr_gte_0_80": metrics["mrr"] >= 0.80,
+    }
+    return {
+        "evaluated_for_final_holdout": final_holdout_frozen,
+        "passed": all(checks.values()) if final_holdout_frozen else None,
+        "checks": checks,
+    }
+
+
 def _distance_summary(
     relevant_distances: list[float],
     irrelevant_distances: list[float],
@@ -483,6 +682,9 @@ def _render_report(summary: dict[str, Any]) -> str:
         f"- 运行模式：`{summary['run_mode']}`",
         f"- Git Commit：`{summary['git_commit']}`",
         f"- 模型：`{summary['model_id']}`（仅本地缓存）",
+        f"- 数据集：`{summary['dataset_name']}` / `{summary['dataset_role']}`",
+        f"- 数据集 SHA-256：`{summary['dataset_sha256']}`",
+        f"- 评估阶段：`{summary['evaluation_stage']}`",
         "- 网络：禁用；未调用 DeepSeek 或 Tavily",
         f"- 数据集：{summary['query_count']} 个 query / {summary['chunk_count']} 个 chunk",
         "- 环境：临时 SQLite、临时 Chroma、临时上传目录，与生产路径隔离",
@@ -502,6 +704,45 @@ def _render_report(summary: dict[str, Any]) -> str:
             f"| {label} | {item['recall_at_1']:.2%} | {item['recall_at_3']:.2%} | "
             f"{item['recall_at_5']:.2%} | {item['precision_at_3']:.2%} | "
             f"{item['mrr']:.2%} | {item['empty_result_accuracy']:.2%} |"
+        )
+    lines.extend(
+        [
+            "",
+            "## 检索可靠性方案比较",
+            "",
+            "| 方案 | Recall@3 | Precision@3 | MRR | 无答案准确率 | False reject | False accept | 截断 | 扩展 |",
+            "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+        ]
+    )
+    for key, label in [
+        ("fixed_current", "A 固定阈值 + 固定候选池"),
+        ("dual_threshold", "B 双阈值 + 固定候选池"),
+        ("confidence_fixed_pool", "C 置信度 + 固定候选池"),
+        ("confidence_adaptive_pool", "D 置信度 + 受控扩展"),
+    ]:
+        item = summary["reliability_strategy_comparison"][key]
+        lines.append(
+            f"| {label} | {item['recall_at_3']:.2%} | {item['precision_at_3']:.2%} | "
+            f"{item['mrr']:.2%} | {item['no_answer_accuracy']:.2%} | "
+            f"{item['false_reject_count']} ({item['false_reject_rate']:.2%}) | "
+            f"{item['false_accept_count']} ({item['false_accept_rate']:.2%}) | "
+            f"{item['candidate_truncation_count']} | {item['adaptive_expansion_count']} |"
+        )
+    if summary["target_assessment"]["evaluated_for_final_holdout"]:
+        failed_checks = [
+            key
+            for key, passed in summary["target_assessment"]["checks"].items()
+            if not passed
+        ]
+        lines.extend(
+            [
+                "",
+                "## Final holdout 目标判定",
+                "",
+                f"- 全部目标通过：{summary['target_assessment']['passed']}",
+                f"- 未达到目标：{', '.join(failed_checks) or '无'}",
+                "- `status=completed` 只表示校准执行完成，不表示指标全部达标。",
+            ]
         )
     lines.extend(
         [
@@ -594,7 +835,13 @@ def _write_skipped_result(output_base: Path, cache: dict[str, Any]) -> Path:
 
 def run_real_calibration(
     output_base: Path = RESULTS_DIR,
-    dataset_path: Path = DATASET_PATH,
+    dataset_path: Path | None = None,
+    *,
+    dataset_name: str = "development",
+    evaluation_stage: str = "calibration",
+    suppress_case_details: bool = False,
+    final_holdout_frozen: bool = False,
+    production_freeze_sha256: str | None = None,
 ) -> tuple[dict[str, Any], Path]:
     configure_offline_environment()
     cache = model_cache_status()
@@ -607,7 +854,15 @@ def run_real_calibration(
             "download_attempted": False,
         }, output_dir
 
-    dataset = load_dataset(dataset_path)
+    if dataset_path is None:
+        dataset, dataset_entry = load_frozen_dataset(dataset_name)
+    else:
+        dataset = load_dataset(dataset_path)
+        dataset_entry = {
+            "dataset_name": dataset_name,
+            "role": dataset.get("dataset_role", "ad_hoc_test"),
+            "sha256": hashlib.sha256(dataset_path.read_bytes()).hexdigest(),
+        }
     started_at = datetime.now().astimezone()
     with tempfile.TemporaryDirectory(prefix="spi-retrieval-calibration-") as temp_dir:
         temp_root = Path(temp_dir).resolve()
@@ -722,6 +977,34 @@ def run_real_calibration(
                         candidates,
                         case["user_id"],
                     )
+                    from app.services.retrieval_confidence import (
+                        ADAPTIVE_EXPANSION_DISTANCE,
+                        HARD_REJECT_DISTANCE,
+                        decide_retrieval_evidence,
+                    )
+
+                    boundary_is_open = bool(
+                        candidates
+                        and isinstance(candidates[-1].get("distance"), (int, float))
+                        and float(candidates[-1]["distance"])
+                        <= ADAPTIVE_EXPANSION_DISTANCE
+                    )
+                    adaptive_expanded = (
+                        len(candidates) == candidate_k
+                        and candidate_k < MAX_CANDIDATES
+                        and boundary_is_open
+                    )
+                    expanded_k = (
+                        min(MAX_CANDIDATES, max(candidate_k + 5, candidate_k * 2))
+                        if adaptive_expanded
+                        else candidate_k
+                    )
+                    expanded_candidates = full_chunks[:expanded_k]
+                    expanded_owned, expanded_names, _, _ = _verify_owned_candidates(
+                        connection,
+                        expanded_candidates,
+                        case["user_id"],
+                    )
                     relevant = set(case["relevant_source_ids"])
                     obvious = set(case["obvious_irrelevant_source_ids"])
                     distance_by_id = {item["source_id"]: float(item["distance"]) for item in all_owned}
@@ -770,6 +1053,28 @@ def run_real_calibration(
                         trusted_file_names=trusted_names,
                         allowed_categories={"project", "resume"},
                     )
+                    dual_threshold = _dual_threshold_rank(
+                        case["query"],
+                        owned,
+                        top_k=5,
+                        trusted_file_names=trusted_names,
+                    )
+                    confidence = decide_retrieval_evidence(
+                        case["query"],
+                        owned,
+                        top_k=5,
+                        high_confidence_distance=DISTANCE_THRESHOLD,
+                        trusted_file_names=trusted_names,
+                        allowed_categories={"project", "resume"},
+                    )
+                    adaptive_confidence = decide_retrieval_evidence(
+                        case["query"],
+                        expanded_owned,
+                        top_k=5,
+                        high_confidence_distance=DISTANCE_THRESHOLD,
+                        trusted_file_names=expanded_names,
+                        allowed_categories={"project", "resume"},
+                    )
                     repeated, _ = _production_rank(
                         case["query"],
                         owned,
@@ -782,6 +1087,15 @@ def run_real_calibration(
                         "vector": [item["source_id"] for item in vector],
                         "lexical": [item["source_id"] for item in lexical],
                         "final": [item["source_id"] for item in final],
+                        "fixed_current": [item["source_id"] for item in final],
+                        "dual_threshold": [item["source_id"] for item in dual_threshold],
+                        "confidence_fixed_pool": [
+                            item["source_id"] for item in confidence.accepted_candidates
+                        ],
+                        "confidence_adaptive_pool": [
+                            item["source_id"]
+                            for item in adaptive_confidence.accepted_candidates
+                        ],
                     }
                     instability_count += int(rankings["final"] != [item["source_id"] for item in repeated])
                     allowed_sources = {
@@ -851,7 +1165,38 @@ def run_real_calibration(
                                 "vector": _normalized_duplicate_ratio(vector),
                                 "lexical": _normalized_duplicate_ratio(lexical),
                                 "final": _normalized_duplicate_ratio(final),
+                                "fixed_current": _normalized_duplicate_ratio(final),
+                                "dual_threshold": _normalized_duplicate_ratio(dual_threshold),
+                                "confidence_fixed_pool": _normalized_duplicate_ratio(
+                                    confidence.accepted_candidates
+                                ),
+                                "confidence_adaptive_pool": _normalized_duplicate_ratio(
+                                    adaptive_confidence.accepted_candidates
+                                ),
                             },
+                            "strategy_candidate_counts": {
+                                "fixed_current": len(owned),
+                                "dual_threshold": len(owned),
+                                "confidence_fixed_pool": len(owned),
+                                "confidence_adaptive_pool": len(expanded_owned),
+                            },
+                            "strategy_candidate_truncated": {
+                                "fixed_current": truncated,
+                                "dual_threshold": truncated,
+                                "confidence_fixed_pool": truncated,
+                                "confidence_adaptive_pool": bool(
+                                    relevant
+                                    and not relevant
+                                    <= {item["source_id"] for item in expanded_candidates}
+                                ),
+                            },
+                            "strategy_adaptive_expanded": {
+                                "fixed_current": False,
+                                "dual_threshold": False,
+                                "confidence_fixed_pool": False,
+                                "confidence_adaptive_pool": adaptive_expanded,
+                            },
+                            "confidence_decision_reason": adaptive_confidence.decision_reason,
                             "all_owned_chunks": all_owned,
                             "trusted_file_names": all_names,
                         }
@@ -868,6 +1213,22 @@ def run_real_calibration(
             strategy: _strategy_metrics(case_rows, strategy)
             for strategy in ("vector", "lexical", "final")
         }
+        reliability_strategy_comparison = {
+            strategy: _reliability_metrics(case_rows, strategy)
+            for strategy in (
+                "fixed_current",
+                "dual_threshold",
+                "confidence_fixed_pool",
+                "confidence_adaptive_pool",
+            )
+        }
+        selected_reliability = reliability_strategy_comparison[
+            "confidence_adaptive_pool"
+        ]
+        target_assessment = _target_assessment(
+            selected_reliability,
+            final_holdout_frozen=final_holdout_frozen,
+        )
         improved = []
         degraded = []
         for row in case_rows:
@@ -904,14 +1265,15 @@ def run_real_calibration(
             recommendation = "本阶段不修改生产参数；真实分布暴露了 Recall、阈值或候选截断问题，建议下一阶段基于失败与截断 case 单独评审参数。"
 
         serializable_cases = []
-        for row in case_rows:
-            serializable_cases.append(
-                {
-                    key: value
-                    for key, value in row.items()
-                    if key not in {"all_owned_chunks", "trusted_file_names", "query"}
-                }
-            )
+        if not suppress_case_details:
+            for row in case_rows:
+                serializable_cases.append(
+                    {
+                        key: value
+                        for key, value in row.items()
+                        if key not in {"all_owned_chunks", "trusted_file_names", "query"}
+                    }
+                )
         summary = {
             "status": "completed",
             "run_mode": "real_embedding",
@@ -919,6 +1281,13 @@ def run_real_calibration(
             "finished_at": datetime.now().astimezone().isoformat(),
             "git_commit": _git_commit(),
             "model_id": MODEL_ID,
+            "dataset_name": dataset_entry["dataset_name"],
+            "dataset_role": dataset_entry["role"],
+            "dataset_sha256": dataset_entry["sha256"],
+            "evaluation_stage": evaluation_stage,
+            "case_details_suppressed": suppress_case_details,
+            "final_holdout_frozen": final_holdout_frozen,
+            "production_freeze_sha256": production_freeze_sha256,
             "embedding_dimension": len(document_embeddings[0]),
             "local_cache_used": True,
             "network_disabled": True,
@@ -947,11 +1316,13 @@ def run_real_calibration(
                 "diversity_penalty": 0.12,
             },
             "strategy_metrics": strategy_metrics,
+            "reliability_strategy_comparison": reliability_strategy_comparison,
+            "target_assessment": target_assessment,
             "distance_distribution": distance_summary,
             "candidate_truncation_count": truncation_count,
             "candidate_truncation_case_ids": truncation_case_ids,
-            "rerank_improved_case_ids": improved,
-            "rerank_degraded_case_ids": degraded,
+            "rerank_improved_case_ids": [] if suppress_case_details else improved,
+            "rerank_degraded_case_ids": [] if suppress_case_details else degraded,
             "cross_user_leakage_count": cross_user_leakage,
             "invalid_source_id_count": invalid_source_ids,
             "sort_instability_count": instability_count,
@@ -986,15 +1357,28 @@ def run_real_calibration(
                 "不包含 Cross Encoder 或 LLM reranker。",
             ],
         }
-        run_id = "retrieval-calibration-" + started_at.strftime("%Y-%m-%dT%H%M%S-%f")
+        run_id = (
+            f"retrieval-calibration-{dataset_name}-"
+            + started_at.strftime("%Y-%m-%dT%H%M%S-%f")
+        )
         output_dir = create_result_dir(output_base, run_id)
         write_json(output_dir / "summary.json", summary)
+        if final_holdout_frozen:
+            write_json(
+                output_dir / "final-holdout-marker.json",
+                {
+                    "final_holdout_frozen": True,
+                    "dataset_sha256": dataset_entry["sha256"],
+                    "production_freeze_sha256": production_freeze_sha256,
+                    "status": summary["status"],
+                },
+            )
         write_json(output_dir / "cases.json", serializable_cases)
         write_json(
             output_dir / "distance-distribution.json",
             {
                 "summary": distance_summary,
-                "cases": [
+                "cases": [] if suppress_case_details else [
                     {
                         "case_id": row["case_id"],
                         "relevant_distances": row["relevant_distances"],

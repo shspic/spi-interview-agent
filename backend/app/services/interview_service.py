@@ -10,7 +10,7 @@ from app.prompts.interview_prompt import (
     build_interview_question_messages,
 )
 from app.services.llm_service import LLMServiceError, chat_with_messages
-from app.services.vector_store import search_similar_chunks
+from app.services.trusted_retrieval_service import search_trusted_evidence
 
 
 class InterviewServiceError(Exception):
@@ -18,12 +18,14 @@ class InterviewServiceError(Exception):
 
 
 def _build_context_and_sources(
+    db: Session,
     query: str,
     user_id: int,
     top_k: int = 8,
 ) -> tuple[str, list[dict]]:
     try:
-        search_result = search_similar_chunks(
+        search_result = search_trusted_evidence(
+            db,
             query=query,
             user_id=user_id,
             top_k=top_k,
@@ -95,6 +97,7 @@ def generate_interview_question(
     job_description: str,
     question_index: int,
     user_id: int,
+    db: Session,
 ) -> dict:
     if not interview_type.strip():
         raise InterviewServiceError("面试类型不能为空")
@@ -104,6 +107,7 @@ def generate_interview_question(
 
     query = f"{interview_type}\n{job_description}"
     context, sources = _build_context_and_sources(
+        db=db,
         query=query,
         user_id=user_id,
         top_k=8,
@@ -148,6 +152,7 @@ def evaluate_interview_answer(
 
     query = f"{interview_type}\n{job_description}\n{question}\n{user_answer}"
     context, sources = _build_context_and_sources(
+        db=db,
         query=query,
         user_id=user_id,
         top_k=8,

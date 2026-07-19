@@ -78,3 +78,9 @@ candidate_k = min(RETRIEVAL_MAX_CANDIDATES,
 隔离的 35 query / 48 chunk 合成集显示，Mock 的 100% Recall@3 不能外推到真实向量：纯距离 Recall@3 为 66.15%，当前完整重排为 69.79%；去重/多样性提升 3 个 case，未检测到退化，但当前 `0.8` 阈值 false reject rate 为 37.5%，并有 5 个 case 的部分相关来源未进入候选池。
 
 本阶段没有修改阈值、候选池或排序权重。阈值放宽到 0.9 会同时增加明显 false accept，候选倍数 4 也只减少 1 个截断 case，因此需要下一阶段独立分析，不能直接根据单一指标调参。完整方法与数据参见 [真实 Embedding 检索校准](RETRIEVAL_CALIBRATION.md)。
+
+## 排序后的证据接受
+
+当前 70/30 重排与 0.12 多样性惩罚保持不变；Agent 调用方在排序后增加独立的确定性充分性判断。`EVIDENCE_MAX_DISTANCE=0.8` 保留为高置信参考，平方 L2 `1.15` 是 Agent 证据硬拒绝边界。候选池上限由 20 调整为 40，但只在初次候选填满且边界开放时最多扩展一次，普通搜索展示接口不使用证据接受策略。
+
+validation 支持选择“置信度 + 受控扩展”：Recall@3 84.26%、无答案 100%、FR 15.38%、FA 8.00%。final holdout 的 Recall@3 只有 70.37%、无答案 85.71%、FR 26.92%、FA 6.00%，说明方案改善拒答但多证据泛化仍不足。本阶段在 holdout 后不再修改参数。详见 [检索证据充分性](RETRIEVAL_CONFIDENCE.md)。

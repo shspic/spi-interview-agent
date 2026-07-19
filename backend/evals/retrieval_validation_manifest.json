@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "created_at": "2026-07-19T22:39:09+08:00",
+  "created_before_production_algorithm_change": true,
+  "baseline_git_commit": "54263a3c6d558fef362782f48a4212e1b71f0f40",
+  "hash_algorithm": "sha256",
+  "datasets": {
+    "development": {
+      "path": "retrieval_calibration_cases.json",
+      "role": "development_tuning",
+      "query_count": 35,
+      "chunk_count": 48,
+      "user_count": 2,
+      "no_answer_count": 3,
+      "sha256": "09eb209a5742c0df5ae2f71f4faeaa7959a92ad91ed4a4ba5523a8b10ea3df0e"
+    },
+    "validation": {
+      "path": "retrieval_validation_cases.json",
+      "role": "validation_selection",
+      "query_count": 25,
+      "chunk_count": 42,
+      "user_count": 3,
+      "no_answer_count": 7,
+      "sha256": "4fbb3ff6c198d8cde99466d081744fdd4db7d972f1756ae3f1d4b8dae8917460"
+    },
+    "final_holdout": {
+      "path": "retrieval_holdout_cases.json",
+      "role": "final_holdout_frozen",
+      "query_count": 25,
+      "chunk_count": 42,
+      "user_count": 3,
+      "no_answer_count": 7,
+      "sha256": "4b6444db54df4036310ece8900ffea1a41977f86f4510cef9cfdf9891d19ae72",
+      "may_influence_tuning": false,
+      "final_holdout_frozen": true
+    }
+  },
+  "overlap_checks": {
+    "duplicate_case_id_count": 0,
+    "exact_chunk_overlap_count": 0
+  }
+}

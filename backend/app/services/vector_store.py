@@ -9,6 +9,10 @@ from app.core.config import settings
 from app.db.models import FileRecord
 from app.services.document_loader import load_document_text
 from app.services.retrieval_ranking import candidate_pool_size, rerank_chunks
+from app.services.retrieval_confidence import (
+    ADAPTIVE_EXPANSION_DISTANCE,
+    HARD_REJECT_DISTANCE,
+)
 from app.services.text_splitter import split_text
 
 COLLECTION_NAME = "personal_knowledge_base"
@@ -270,6 +274,67 @@ def search_similar_chunks(
         "distance_metric": DISTANCE_METRIC,
         "chunks": ranked,
         "retrieval_stats": stats,
+    }
+
+
+def search_evidence_candidates(
+    query: str,
+    user_id: int,
+    top_k: int,
+) -> dict[str, Any]:
+    """为证据检索最多执行一次受控扩展，不负责证据充分性判断。"""
+    initial_k = candidate_pool_size(
+        top_k,
+        settings.retrieval_candidate_multiplier,
+        settings.retrieval_max_candidates,
+    )
+    initial = search_candidate_chunks(query, user_id, initial_k)
+    chunks = initial.get("chunks", []) or []
+    expanded = False
+    query_count = 1
+    final_k = initial_k
+    eligible_count = sum(
+        isinstance(item.get("distance"), (int, float))
+        and not isinstance(item.get("distance"), bool)
+        and float(item["distance"]) <= HARD_REJECT_DISTANCE
+        and (item.get("metadata") or {}).get("category") in {"project", "resume"}
+        for item in chunks
+    )
+    boundary_is_open = bool(
+        chunks
+        and isinstance(chunks[-1].get("distance"), (int, float))
+        and not isinstance(chunks[-1].get("distance"), bool)
+        and float(chunks[-1]["distance"]) <= ADAPTIVE_EXPANSION_DISTANCE
+    )
+    should_expand = (
+        len(chunks) == initial_k
+        and initial_k < settings.retrieval_max_candidates
+        and (eligible_count < top_k or boundary_is_open)
+    )
+    if should_expand:
+        final_k = min(
+            settings.retrieval_max_candidates,
+            max(initial_k + top_k, initial_k * 2),
+        )
+        expanded_result = search_candidate_chunks(query, user_id, final_k)
+        chunks = expanded_result.get("chunks", []) or []
+        retrieval_stats = expanded_result.get("retrieval_stats", {})
+        expanded = True
+        query_count = 2
+    else:
+        retrieval_stats = initial.get("retrieval_stats", {})
+    return {
+        "query": query,
+        "top_k": top_k,
+        "candidate_k": final_k,
+        "distance_metric": DISTANCE_METRIC,
+        "chunks": chunks,
+        "retrieval_stats": {
+            **retrieval_stats,
+            "initial_candidate_k": initial_k,
+            "adaptive_expanded": expanded,
+            "chroma_query_count": query_count,
+        },
     }
 
 

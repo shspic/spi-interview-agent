@@ -35,6 +35,7 @@ class InterviewEvaluateRequest(BaseModel):
 )
 def generate_question_api(
     request: InterviewQuestionRequest,
+    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     try:
@@ -43,6 +44,7 @@ def generate_question_api(
             job_description=request.job_description,
             question_index=request.question_index,
             user_id=current_user.id,
+            db=db,
         )
     except InterviewServiceError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

@@ -27,7 +27,7 @@ class Settings(BaseModel):
         le=10,
     )
     retrieval_max_candidates: int = Field(
-        default=int(os.getenv("RETRIEVAL_MAX_CANDIDATES", "20")),
+        default=int(os.getenv("RETRIEVAL_MAX_CANDIDATES", "40")),
         ge=1,
         le=100,
     )

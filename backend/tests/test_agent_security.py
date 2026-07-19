@@ -4,7 +4,7 @@ import pytest
 from sqlalchemy import event
 
 from app.db.models import FileRecord, InterviewSession, TargetJob, User, UserProfile
-from app.services import evidence_retrieval_service
+from app.services import evidence_retrieval_service, trusted_retrieval_service
 from app.services.prompt_injection_guard import (
     RISK_CROSS_USER_REQUEST,
     RISK_EVIDENCE_BYPASS,
@@ -371,3 +371,95 @@ def test_untrusted_input_sanitization_removes_only_unsafe_line():
     assert unsafe_line not in result.sanitized_text
     assert "项目使用 FastAPI" in result.sanitized_text
     assert "用户负责接口开发" in result.sanitized_text
+
+
+def test_trusted_prompt_retrieval_batches_ownership_and_rejects_jd(
+    db_session,
+    monkeypatch,
+):
+    user_a = _create_user(db_session, "trusted-retrieval-a")
+    user_b = _create_user(db_session, "trusted-retrieval-b")
+    own = _create_file(db_session, user_a, "trusted-project")
+    jd = _create_file(db_session, user_a, "trusted-jd", category="other")
+    foreign = _create_file(db_session, user_b, "trusted-foreign")
+    candidates = [
+        {
+            "content": "当前用户项目使用 FastAPI 实现接口。",
+            "distance": 0.2,
+            "metadata": {"user_id": user_a.id, "file_id": own.file_id, "chunk_index": 0},
+        },
+        {
+            "content": "岗位要求 FastAPI。",
+            "distance": 0.1,
+            "metadata": {"user_id": user_a.id, "file_id": jd.file_id, "chunk_index": 0},
+        },
+        {
+            "content": "其他用户高度相关的 FastAPI 项目。",
+            "distance": 0.01,
+            "metadata": {"user_id": user_a.id, "file_id": foreign.file_id, "chunk_index": 0},
+        },
+    ]
+    monkeypatch.setattr(
+        trusted_retrieval_service,
+        "search_evidence_candidates",
+        lambda *args, **kwargs: {"chunks": candidates, "retrieval_stats": {}},
+    )
+    file_selects = 0
+
+    def count_file_queries(_conn, _cursor, statement, _params, _context, _many):
+        nonlocal file_selects
+        if statement.lstrip().upper().startswith("SELECT") and "FROM files" in statement:
+            file_selects += 1
+
+    event.listen(db_session.bind, "before_cursor_execute", count_file_queries)
+    try:
+        result = trusted_retrieval_service.search_trusted_evidence(
+            db_session,
+            query="FastAPI 接口如何实现",
+            user_id=user_a.id,
+            top_k=3,
+        )
+    finally:
+        event.remove(db_session.bind, "before_cursor_execute", count_file_queries)
+
+    assert file_selects == 1
+    assert result["sufficient"] is True
+    assert [item["metadata"]["file_id"] for item in result["chunks"]] == [own.file_id]
+    assert result["chunks"][0]["metadata"]["filename"] == own.filename
+    assert result["retrieval_stats"]["file_record_batch_query_count"] == 1
+
+
+def test_other_user_and_jd_only_are_insufficient(db_session, monkeypatch):
+    user_a = _create_user(db_session, "insufficient-a")
+    user_b = _create_user(db_session, "insufficient-b")
+    jd = _create_file(db_session, user_a, "insufficient-jd", category="other")
+    foreign = _create_file(db_session, user_b, "insufficient-foreign")
+    monkeypatch.setattr(
+        trusted_retrieval_service,
+        "search_evidence_candidates",
+        lambda *args, **kwargs: {
+            "chunks": [
+                {
+                    "content": "JD 要求 Kubernetes。",
+                    "distance": 0.1,
+                    "metadata": {"user_id": user_a.id, "file_id": jd.file_id, "chunk_index": 0},
+                },
+                {
+                    "content": "其他用户部署 Kubernetes。",
+                    "distance": 0.01,
+                    "metadata": {"user_id": user_a.id, "file_id": foreign.file_id, "chunk_index": 0},
+                },
+            ],
+            "retrieval_stats": {},
+        },
+    )
+
+    result = trusted_retrieval_service.search_trusted_evidence(
+        db_session,
+        query="是否部署 Kubernetes",
+        user_id=user_a.id,
+        top_k=3,
+    )
+
+    assert result["sufficient"] is False
+    assert result["chunks"] == []
