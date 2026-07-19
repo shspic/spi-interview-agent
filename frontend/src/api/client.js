@@ -43,7 +43,10 @@ apiClient.interceptors.request.use((config) => {
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    const disabledAccount =
+      error.response?.status === 403 && error.response?.data?.detail === "账号已停用";
+
+    if (error.response?.status === 401 || disabledAccount) {
       clearStoredToken();
       unauthorizedHandler?.();
     }

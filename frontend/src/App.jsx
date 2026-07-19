@@ -8,6 +8,9 @@ import History from "./pages/History";
 import SystemStatus from "./pages/SystemStatus";
 import AuthPage from "./pages/AuthPage";
 import Profile from "./pages/Profile";
+import Usage from "./pages/Usage";
+import Settings from "./pages/Settings";
+import AdminDashboard from "./pages/AdminDashboard";
 
 import "./index.css";
 
@@ -42,6 +45,24 @@ const profilePage = {
   description: "维护个人介绍、技术栈、资料文件分类和当前目标岗位。",
 };
 
+const utilityPages = {
+  usage: {
+    key: "usage",
+    label: "用量查看",
+    description: "查看当日业务额度、执行中预留和下一次重置时间。",
+  },
+  settings: {
+    key: "settings",
+    label: "设置",
+    description: "查看账号信息，修改密码并管理个人业务数据。",
+  },
+  admin: {
+    key: "admin",
+    label: "管理后台",
+    description: "管理用户、用量、邀请码、运行记录、审计日志和数据清理。",
+  },
+};
+
 function App() {
   const { currentUser, isAuthenticated, isLoading, logout } = useAuth();
   const [activePage, setActivePage] = useState("interview-agent");
@@ -49,10 +70,15 @@ function App() {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [requestedSessionId, setRequestedSessionId] = useState(null);
 
+  const handleDataCleaned = () => {
+    localStorage.removeItem("spi_interview_active_session");
+    setRequestedSessionId(null);
+  };
+
   const currentPage =
     activePage === "profile"
       ? profilePage
-      : pages.find((page) => page.key === activePage);
+      : utilityPages[activePage] || pages.find((page) => page.key === activePage);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -68,8 +94,7 @@ function App() {
         } else {
           setBackendStatus("异常");
         }
-      } catch (error) {
-        console.error("health check error:", error);
+      } catch {
         setBackendStatus("连接失败");
       }
     };
@@ -132,12 +157,35 @@ function App() {
               >
                 我的资料
               </button>
-              <button type="button" disabled title="后续开放">
-                用量查看 <span>后续开放</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setActivePage("usage");
+                  setUserMenuOpen(false);
+                }}
+              >
+                用量查看
               </button>
-              <button type="button" disabled title="后续开放">
-                设置 <span>后续开放</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setActivePage("settings");
+                  setUserMenuOpen(false);
+                }}
+              >
+                设置
               </button>
+              {currentUser?.is_admin && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActivePage("admin");
+                    setUserMenuOpen(false);
+                  }}
+                >
+                  管理后台
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => {
@@ -176,7 +224,7 @@ function App() {
           </div>
 
           <div className="top-panel-actions">
-            {activePage !== "profile" && (
+            {activePage !== "profile" && activePage !== "admin" && (
               <button
                 type="button"
                 className="profile-entry-button"
@@ -203,6 +251,12 @@ function App() {
         <div className="content-card">
           {activePage === "profile" ? (
             <Profile onOpenKnowledge={() => setActivePage("knowledge")} />
+          ) : activePage === "usage" ? (
+            <Usage />
+          ) : activePage === "settings" ? (
+            <Settings onDataCleaned={handleDataCleaned} />
+          ) : activePage === "admin" ? (
+            <AdminDashboard onBack={() => setActivePage("interview-agent")} />
           ) : activePage === "interview-agent" ? (
             <InterviewAgent
               requestedSessionId={requestedSessionId}

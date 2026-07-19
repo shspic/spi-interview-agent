@@ -85,6 +85,7 @@ def preview_expired_data(db: Session, now: datetime | None = None) -> dict:
     return {
         "cutoff": cutoff.isoformat(timespec="seconds"),
         "retention_days": settings.data_retention_days,
+        "timezone": settings.app_timezone,
         "estimated_counts": counts,
     }
 
@@ -181,6 +182,7 @@ def cleanup_expired_data(db: Session, now: datetime | None = None) -> dict:
         "success": not failed_items,
         "cutoff": preview["cutoff"],
         "retention_days": preview["retention_days"],
+        "timezone": preview["timezone"],
         "deleted_counts": deleted_counts,
         "failed_items": failed_items,
     }

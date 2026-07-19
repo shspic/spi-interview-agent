@@ -18,7 +18,21 @@ export function getFriendlyErrorMessage(error, fallbackMessage = "请求失败�
   }
 
   if (detail && typeof detail === "object") {
-    return detail.message || fallbackMessage;
+    const detailMessage = detail.message || fallbackMessage;
+    if (status === 429) {
+      const usage = [];
+      if (detail.used !== undefined && detail.limit !== undefined) {
+        usage.push(`已使用 ${detail.used}/${detail.limit}`);
+      }
+      if (detail.remaining !== undefined) {
+        usage.push(`剩余 ${detail.remaining}`);
+      }
+      if (detail.reset_at) {
+        usage.push(`重置时间 ${detail.reset_at}`);
+      }
+      return usage.length ? `${detailMessage}（${usage.join("，")}）` : detailMessage;
+    }
+    return detailMessage;
   }
 
   if (code === "ECONNABORTED") {
@@ -43,6 +57,10 @@ export function getFriendlyErrorMessage(error, fallbackMessage = "请求失败�
 
   if (status === 409) {
     return "当前操作与会话状态冲突，页面将重新读取最新状态。";
+  }
+
+  if (status === 429) {
+    return "今日额度已用完，请在额度重置后再试。";
   }
 
   if (status === 404) {

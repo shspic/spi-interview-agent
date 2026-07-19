@@ -671,3 +671,31 @@ class AdminAuditLog(Base):
     status = Column(Text, nullable=False, index=True)
     detail_summary = Column(Text, nullable=False, default="")
     created_at = Column(Text, nullable=False, index=True)
+
+
+class UserDataDeletionLog(Base):
+    __tablename__ = "user_data_deletion_logs"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('success', 'failed')",
+            name="ck_user_data_deletion_logs_status",
+        ),
+        Index(
+            "ix_user_data_deletion_logs_user_created",
+            "user_id",
+            "created_at",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    status = Column(Text, nullable=False, index=True)
+    deleted_counts = Column(JSON, nullable=False, default=dict)
+    failure_count = Column(Integer, nullable=False, default=0)
+    detail_summary = Column(Text, nullable=False, default="")
+    created_at = Column(Text, nullable=False, index=True)

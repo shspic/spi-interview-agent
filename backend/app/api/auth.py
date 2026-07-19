@@ -40,6 +40,14 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class ChangePasswordRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    current_password: str
+    new_password: str
+    confirm_password: str
+
+
 def user_to_dict(user: User) -> dict:
     return {
         "id": user.id,
@@ -139,3 +147,22 @@ def login_user(
 @router.get("/auth/me")
 def get_me(current_user: User = Depends(get_current_user)):
     return {"user": user_to_dict(current_user)}
+
+
+@router.post("/auth/change-password")
+def change_password(
+    request: ChangePasswordRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if request.new_password != request.confirm_password:
+        raise HTTPException(status_code=400, detail="两次输入的新密码不一致")
+    if not verify_password(request.current_password, current_user.password_hash):
+        raise HTTPException(status_code=400, detail="当前密码错误")
+    if verify_password(request.new_password, current_user.password_hash):
+        raise HTTPException(status_code=400, detail="新密码不能与当前密码相同")
+
+    validate_password(request.new_password)
+    current_user.password_hash = hash_password(request.new_password)
+    db.commit()
+    return {"success": True, "message": "密码修改成功，请重新登录"}
