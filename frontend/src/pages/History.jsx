@@ -1,8 +1,17 @@
 import { useCallback, useEffect, useState } from "react";
 
 import apiClient from "../api/client";
+import {
+  getInterviewSession,
+  getInterviewSessions,
+} from "../api/interviewTraining";
+import { getFriendlyErrorMessage } from "../utils/errorMessage";
 
 const tabs = [
+  {
+    key: "training",
+    label: "面试训练记录",
+  },
   {
     key: "chat",
     label: "自由问答",
@@ -33,12 +42,14 @@ function getShortText(text, maxLength = 80) {
   return `${text.slice(0, maxLength)}...`;
 }
 
-function History() {
-  const [activeTab, setActiveTab] = useState("chat");
+function History({ onOpenTrainingSession }) {
+  const [activeTab, setActiveTab] = useState("training");
   const [historyRecords, setHistoryRecords] = useState([]);
   const [interviewRecords, setInterviewRecords] = useState([]);
+  const [trainingSessions, setTrainingSessions] = useState([]);
   const [selectedHistoryRecord, setSelectedHistoryRecord] = useState(null);
   const [selectedInterviewRecord, setSelectedInterviewRecord] = useState(null);
+  const [selectedTrainingSession, setSelectedTrainingSession] = useState(null);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -48,8 +59,11 @@ function History() {
       setMessage("正在加载历史记录...");
       setSelectedHistoryRecord(null);
       setSelectedInterviewRecord(null);
+      setSelectedTrainingSession(null);
 
-      if (tabKey === "interview") {
+      if (tabKey === "training") {
+        setTrainingSessions(await getInterviewSessions());
+      } else if (tabKey === "interview") {
         const response = await apiClient.get("/api/interview-records");
         setInterviewRecords(response.data.records || []);
       } else {
@@ -150,6 +164,19 @@ function History() {
 
       const detail = error.response?.data?.detail;
       setMessage(detail || "获取模拟面试记录详情失败。");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleViewTrainingDetail = async (sessionId) => {
+    try {
+      setLoading(true);
+      setMessage("正在加载面试训练详情...");
+      setSelectedTrainingSession(await getInterviewSession(sessionId));
+      setMessage("面试训练详情加载成功。");
+    } catch (error) {
+      setMessage(getFriendlyErrorMessage(error, "获取面试训练详情失败。"));
     } finally {
       setLoading(false);
     }
@@ -541,10 +568,56 @@ function History() {
     );
   };
 
+  const renderTrainingTable = () => {
+    if (trainingSessions.length === 0) {
+      return <p className="empty-text">暂无面试训练记录。</p>;
+    }
+
+    return (
+      <table className="file-table training-history-table">
+        <thead><tr><th>标题</th><th>模式</th><th>状态</th><th>总分</th><th>创建时间</th><th>完成时间</th><th>操作</th></tr></thead>
+        <tbody>
+          {trainingSessions.map((item) => (
+            <tr key={item.id}>
+              <td>{item.title}</td>
+              <td>{{ quick: "快速练习", standard: "标准面试", deep_dive: "专项深挖" }[item.mode] || item.mode}</td>
+              <td>{{ draft: "草稿", in_progress: "进行中", completed: "已完成", cancelled: "已取消" }[item.status] || item.status}</td>
+              <td>{item.overall_score ?? "-"}</td>
+              <td>{item.created_at ? new Date(item.created_at).toLocaleString("zh-CN") : "-"}</td>
+              <td>{item.completed_at ? new Date(item.completed_at).toLocaleString("zh-CN") : "-"}</td>
+              <td className="action-cell">
+                <button type="button" onClick={() => handleViewTrainingDetail(item.id)} disabled={loading}>查看详情</button>
+                <button type="button" className="secondary-button" onClick={() => onOpenTrainingSession?.(item.id)}>进入工作台</button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    );
+  };
+
+  const renderSelectedTrainingDetail = () => {
+    if (!selectedTrainingSession) {
+      return null;
+    }
+    return (
+      <div className="history-detail-card">
+        <div className="inline-heading"><div><h2>{selectedTrainingSession.title}</h2><p>{selectedTrainingSession.summary || "暂无整场总结。"}</p></div><button type="button" onClick={() => onOpenTrainingSession?.(selectedTrainingSession.id)}>进入面试 Agent</button></div>
+        <div className="detail-grid">
+          <p>状态：<strong>{selectedTrainingSession.status}</strong></p>
+          <p>主问题：<strong>{selectedTrainingSession.planned_main_questions}</strong></p>
+          <p>总分：<strong>{selectedTrainingSession.overall_score ?? "-"}</strong></p>
+          <p>完成时间：<strong>{selectedTrainingSession.completed_at || "-"}</strong></p>
+        </div>
+        <div className="detail-block"><h3>题目记录</h3>{selectedTrainingSession.turns?.length ? <ol>{selectedTrainingSession.turns.map((turn) => <li key={turn.id}><strong>{turn.question}</strong><p>{turn.user_answer || "尚未回答"}</p><span>{turn.total_score == null ? "待评价" : `${turn.total_score} 分`}</span></li>)}</ol> : <p className="empty-text">暂无题目。</p>}</div>
+      </div>
+    );
+  };
+
   return (
     <section>
       <h1>历史记录</h1>
-      <p>查看自由问答、岗位分析和模拟面试产生的历史记录。</p>
+      <p>查看面试训练，以及原有自由问答、岗位分析和模拟面试记录。</p>
 
       <div className="history-tabs">
         {tabs.map((tab) => (
@@ -574,10 +647,15 @@ function History() {
 
       {message && <p className="message-text">{message}</p>}
 
-      {activeTab === "interview" ? renderInterviewTable() : renderHistoryTable()}
+      {activeTab === "training"
+        ? renderTrainingTable()
+        : activeTab === "interview"
+          ? renderInterviewTable()
+          : renderHistoryTable()}
 
       {renderSelectedHistoryDetail()}
       {renderSelectedInterviewDetail()}
+      {renderSelectedTrainingDetail()}
     </section>
   );
 }

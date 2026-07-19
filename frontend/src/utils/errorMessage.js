@@ -4,8 +4,21 @@ export function getFriendlyErrorMessage(error, fallbackMessage = "请求失败�
   const code = error.code;
   const message = error.message;
 
-  if (detail) {
+  if (typeof detail === "string") {
     return detail;
+  }
+
+  if (Array.isArray(detail)) {
+    const messages = detail
+      .map((item) => item?.msg)
+      .filter(Boolean);
+    return messages.length
+      ? `输入内容不符合要求：${messages.join("；")}`
+      : "请求内容不符合后端校验要求。";
+  }
+
+  if (detail && typeof detail === "object") {
+    return detail.message || fallbackMessage;
   }
 
   if (code === "ECONNABORTED") {
@@ -26,6 +39,10 @@ export function getFriendlyErrorMessage(error, fallbackMessage = "请求失败�
 
   if (status === 403) {
     return "当前账号没有权限执行此操作。";
+  }
+
+  if (status === 409) {
+    return "当前操作与会话状态冲突，页面将重新读取最新状态。";
   }
 
   if (status === 404) {

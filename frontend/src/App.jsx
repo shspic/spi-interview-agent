@@ -3,10 +3,7 @@ import { useEffect, useState } from "react";
 import apiClient from "./api/client";
 import { useAuth } from "./auth/authContext";
 import KnowledgeBase from "./pages/KnowledgeBase";
-import JobAnalysis from "./pages/JobAnalysis";
-import Agent from "./pages/Agent";
-import Chat from "./pages/Chat";
-import Interview from "./pages/Interview";
+import InterviewAgent from "./pages/InterviewAgent";
 import History from "./pages/History";
 import SystemStatus from "./pages/SystemStatus";
 import AuthPage from "./pages/AuthPage";
@@ -16,46 +13,26 @@ import "./index.css";
 
 const pages = [
   {
+    key: "interview-agent",
+    label: "面试 Agent",
+    description: "从资料准备到面试、评价、改进复练和简历表达的一体化训练工作台。",
+  },
+  {
     key: "knowledge",
     label: "知识库管理",
     description: "统一管理资料上传、索引状态和知识库重建。",
     component: <KnowledgeBase />,
   },
   {
+    key: "history",
+    label: "历史记录",
+    description: "查看面试训练记录以及原有问答、岗位分析和模拟面试历史。",
+  },
+  {
     key: "system",
     label: "系统状态",
     description: "查看后端、数据库、API Key 与向量索引运行状态。",
     component: <SystemStatus />,
-  },
-  {
-    key: "job",
-    label: "岗位分析",
-    description: "结合本地知识库与岗位信息，提炼匹配点和面试重点。",
-    component: <JobAnalysis />,
-  },
-  {
-    key: "agent",
-    label: "LangGraph Agent",
-    description: "在本地知识库、联网搜索与混合检索之间智能路由。",
-    component: <Agent />,
-  },
-  {
-    key: "chat",
-    label: "自由问答",
-    description: "围绕个人资料、项目经历和技术笔记进行 RAG 问答。",
-    component: <Chat />,
-  },
-  {
-    key: "interview",
-    label: "模拟面试",
-    description: "生成面试题、评估回答，并沉淀可复盘的面试记录。",
-    component: <Interview />,
-  },
-  {
-    key: "history",
-    label: "历史记录",
-    description: "检索问答、岗位分析、Agent 和模拟面试的历史结果。",
-    component: <History />,
   },
 ];
 
@@ -67,9 +44,10 @@ const profilePage = {
 
 function App() {
   const { currentUser, isAuthenticated, isLoading, logout } = useAuth();
-  const [activePage, setActivePage] = useState("knowledge");
+  const [activePage, setActivePage] = useState("interview-agent");
   const [backendStatus, setBackendStatus] = useState("检查中");
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [requestedSessionId, setRequestedSessionId] = useState(null);
 
   const currentPage =
     activePage === "profile"
@@ -154,6 +132,12 @@ function App() {
               >
                 我的资料
               </button>
+              <button type="button" disabled title="后续开放">
+                用量查看 <span>后续开放</span>
+              </button>
+              <button type="button" disabled title="后续开放">
+                设置 <span>后续开放</span>
+              </button>
               <button
                 type="button"
                 onClick={() => {
@@ -219,6 +203,19 @@ function App() {
         <div className="content-card">
           {activePage === "profile" ? (
             <Profile onOpenKnowledge={() => setActivePage("knowledge")} />
+          ) : activePage === "interview-agent" ? (
+            <InterviewAgent
+              requestedSessionId={requestedSessionId}
+              onOpenProfile={() => setActivePage("profile")}
+              onOpenKnowledge={() => setActivePage("knowledge")}
+            />
+          ) : activePage === "history" ? (
+            <History
+              onOpenTrainingSession={(sessionId) => {
+                setRequestedSessionId(sessionId);
+                setActivePage("interview-agent");
+              }}
+            />
           ) : (
             currentPage?.component
           )}
