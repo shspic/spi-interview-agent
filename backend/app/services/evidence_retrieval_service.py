@@ -8,7 +8,7 @@ from app.db.models import FileRecord, InterviewSession, TargetJob, UserProfile
 from app.services.vector_store import DISTANCE_METRIC, search_similar_chunks
 
 
-def _load_profile_evidence(
+def load_profile_evidence(
     db: Session,
     user_id: int,
 ) -> list[EvidenceItem]:
@@ -81,7 +81,7 @@ def retrieve_interview_evidence(
     if interview_session is None:
         raise ValueError("面试会话不存在")
 
-    profile_evidence = _load_profile_evidence(db, user_id)
+    profile_evidence = load_profile_evidence(db, user_id)
     job_requirements = _load_job_requirements(db, user_id, interview_session)
     search_error = None
     try:

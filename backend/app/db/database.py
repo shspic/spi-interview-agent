@@ -47,7 +47,7 @@ def init_db():
     ensure_interview_session_agent_columns()
     ensure_interview_turn_evaluation_columns()
     ensure_interview_improvement_columns()
-    ensure_agent_run_supports_improvement()
+    ensure_agent_run_supports_resume()
 
 
 def get_db():
@@ -226,7 +226,7 @@ def ensure_interview_improvement_columns():
         )
 
 
-def ensure_agent_run_supports_improvement():
+def ensure_agent_run_supports_resume():
     with engine.connect() as connection:
         table_sql = connection.execute(
             text(
@@ -235,7 +235,7 @@ def ensure_agent_run_supports_improvement():
             )
         ).scalar_one_or_none()
 
-    if table_sql is None or "'improvement'" in table_sql:
+    if table_sql is None or "'resume'" in table_sql:
         return
 
     with engine.begin() as connection:
@@ -249,7 +249,7 @@ def ensure_agent_run_supports_improvement():
                 "user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, "
                 "agent_name TEXT NOT NULL CHECK (agent_name IN "
                 "('supervisor', 'evidence', 'evaluation', 'interviewer', "
-                "'improvement')), "
+                "'improvement', 'resume')), "
                 "prompt_version TEXT NOT NULL, "
                 "status TEXT NOT NULL CHECK (status IN ('success', 'error')), "
                 "latency_ms INTEGER NOT NULL CHECK (latency_ms >= 0), "

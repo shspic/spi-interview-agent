@@ -445,7 +445,7 @@ class AgentRun(Base):
     __table_args__ = (
         CheckConstraint(
             "agent_name IN ('supervisor', 'evidence', 'evaluation', "
-            "'interviewer', 'improvement')",
+            "'interviewer', 'improvement', 'resume')",
             name="ck_agent_runs_agent_name",
         ),
         CheckConstraint(
@@ -483,3 +483,55 @@ class AgentRun(Base):
     created_at = Column(Text, nullable=False, index=True)
 
     session = relationship("InterviewSession", back_populates="agent_runs")
+
+
+class ResumeProjectDescription(Base):
+    __tablename__ = "resume_project_descriptions"
+    __table_args__ = (
+        Index(
+            "ix_resume_project_descriptions_user_created",
+            "user_id",
+            "created_at",
+        ),
+        Index(
+            "ix_resume_project_descriptions_user_session",
+            "user_id",
+            "session_id",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    session_id = Column(
+        Integer,
+        ForeignKey("interview_sessions.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    target_job_id = Column(
+        Integer,
+        ForeignKey("target_jobs.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    project_file_ids = Column(JSON, nullable=False, default=list)
+    project_name = Column(Text, nullable=False)
+    one_line_summary = Column(Text, nullable=False)
+    concise_bullets = Column(JSON, nullable=False, default=list)
+    detailed_description = Column(Text, nullable=False)
+    technical_stack = Column(JSON, nullable=False, default=list)
+    responsibilities = Column(JSON, nullable=False, default=list)
+    challenges = Column(JSON, nullable=False, default=list)
+    solutions = Column(JSON, nullable=False, default=list)
+    outcomes = Column(JSON, nullable=False, default=list)
+    interview_talking_points = Column(JSON, nullable=False, default=list)
+    warnings = Column(JSON, nullable=False, default=list)
+    evidence_source_ids = Column(JSON, nullable=False, default=list)
+    prompt_version = Column(Text, nullable=False)
+    created_at = Column(Text, nullable=False, index=True)
+    updated_at = Column(Text, nullable=False)

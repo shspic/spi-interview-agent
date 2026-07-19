@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -228,3 +228,99 @@ class ImprovementOutput(AgentSchema):
     weakest_dimensions: list[str] = Field(default_factory=list, max_length=5)
     next_round_strategy: str = Field(min_length=1, max_length=5000)
     tasks: list[ImprovementTaskProposal] = Field(min_length=3, max_length=8)
+
+
+class ResumeProjectFileInput(AgentSchema):
+    file_id: str
+    filename: str
+    file_type: str
+
+
+class ResumeProfileInput(AgentSchema):
+    display_name: str = ""
+    target_direction: str = ""
+    self_introduction: str = ""
+    technical_skills: list[str] = Field(default_factory=list, max_length=30)
+
+
+class ResumeTargetJobInput(AgentSchema):
+    job_title: str
+    company_name: str = ""
+    jd_text: str
+
+
+class ResumeSessionInput(AgentSchema):
+    session_id: int = Field(gt=0)
+    title: str
+    mode: Literal["quick", "standard", "deep_dive"]
+    overall_score: float | None = Field(default=None, ge=0, le=100)
+    dimension_scores: dict[str, float] | None = None
+    summary: str | None = None
+
+
+class ResumeInterviewTurnInput(AgentSchema):
+    turn_id: int = Field(gt=0)
+    question: str
+    total_score: int = Field(ge=0, le=100)
+    evaluation_summary: str
+    strengths: list[str] = Field(default_factory=list, max_length=20)
+    problems: list[EvaluationProblem] = Field(default_factory=list, max_length=20)
+    optimized_answer: str
+    unsupported_claims: list[str] = Field(default_factory=list, max_length=20)
+    evidence_conflicts: list[EvaluationConflict] = Field(
+        default_factory=list,
+        max_length=20,
+    )
+
+
+class ResumeGenerationInput(AgentSchema):
+    project_files: list[ResumeProjectFileInput] = Field(
+        min_length=1,
+        max_length=20,
+    )
+    project_evidence: list[EvidenceItem] = Field(
+        default_factory=list,
+        max_length=50,
+    )
+    resume_evidence: list[EvidenceItem] = Field(default_factory=list, max_length=50)
+    profile_evidence: list[EvidenceItem] = Field(default_factory=list, max_length=5)
+    profile: ResumeProfileInput | None = None
+    target_job: ResumeTargetJobInput | None = None
+    job_requirements: list[EvidenceItem] = Field(default_factory=list, max_length=5)
+    interview_session: ResumeSessionInput
+    interview_turns: list[ResumeInterviewTurnInput] = Field(
+        min_length=1,
+        max_length=50,
+    )
+    evidence_is_sufficient: bool
+    evidence_reason: str
+
+
+ResumeListItem = Annotated[str, Field(min_length=1, max_length=2000)]
+
+
+class ResumeGenerationOutput(AgentSchema):
+    project_name: str = Field(min_length=1, max_length=200)
+    one_line_summary: str = Field(min_length=1, max_length=500)
+    concise_bullets: list[ResumeListItem] = Field(min_length=3, max_length=4)
+    detailed_description: str = Field(min_length=1, max_length=10000)
+    technical_stack: list[ResumeListItem] = Field(
+        default_factory=list,
+        max_length=30,
+    )
+    responsibilities: list[ResumeListItem] = Field(
+        default_factory=list,
+        max_length=20,
+    )
+    challenges: list[ResumeListItem] = Field(default_factory=list, max_length=20)
+    solutions: list[ResumeListItem] = Field(default_factory=list, max_length=20)
+    outcomes: list[ResumeListItem] = Field(default_factory=list, max_length=20)
+    interview_talking_points: list[ResumeListItem] = Field(
+        default_factory=list,
+        max_length=20,
+    )
+    warnings: list[ResumeListItem] = Field(default_factory=list, max_length=20)
+    evidence_source_ids: list[ResumeListItem] = Field(
+        default_factory=list,
+        max_length=50,
+    )
