@@ -7,6 +7,7 @@ from app.agents.prompts.resume_prompt import (
 )
 from app.agents.schemas import ResumeGenerationInput, ResumeGenerationOutput
 from app.agents.structured_llm import invoke_structured
+from app.services.prompt_injection_guard import validate_agent_output_texts
 
 NUMBER_PATTERN = re.compile(r"(?<![\d.])[+-]?\d+(?:\.\d+)?%?")
 
@@ -32,6 +33,22 @@ class ResumeAgent:
         forbidden_claims = self._forbidden_claims(payload)
 
         def validate(result: ResumeGenerationOutput) -> None:
+            validate_agent_output_texts(
+                [
+                    result.project_name,
+                    result.one_line_summary,
+                    *result.concise_bullets,
+                    result.detailed_description,
+                    *result.technical_stack,
+                    *result.responsibilities,
+                    *result.challenges,
+                    *result.solutions,
+                    *result.outcomes,
+                    *result.interview_talking_points,
+                    *result.warnings,
+                ],
+                agent_name=self.name,
+            )
             invalid_source_ids = set(result.evidence_source_ids) - allowed_source_ids
             if invalid_source_ids:
                 raise ValueError("evidence_source_ids 引用了不存在的证据")

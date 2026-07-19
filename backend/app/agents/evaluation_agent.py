@@ -7,6 +7,7 @@ from app.agents.prompts.evaluation_prompt import (
 )
 from app.agents.schemas import EvaluationInput, EvaluationOutput
 from app.agents.structured_llm import invoke_structured
+from app.services.prompt_injection_guard import validate_agent_output_texts
 
 NUMBER_PATTERN = re.compile(r"(?<![A-Za-z0-9_])\d+(?:\.\d+)?%?")
 
@@ -40,6 +41,20 @@ class EvaluationAgent:
         )
 
         def validate_result(result: EvaluationOutput) -> None:
+            validate_agent_output_texts(
+                [
+                    result.evaluation_summary,
+                    result.optimized_answer,
+                    result.modification_reason,
+                    *result.unsupported_claims,
+                    *result.strengths,
+                    *(problem.description for problem in result.problems),
+                    *(problem.suggestion for problem in result.problems),
+                    *(conflict.claim for conflict in result.evidence_conflicts),
+                    *(conflict.explanation for conflict in result.evidence_conflicts),
+                ],
+                agent_name=self.name,
+            )
             referenced_ids = set(result.evidence_source_ids)
             for conflict in result.evidence_conflicts:
                 referenced_ids.update(conflict.evidence_source_ids)

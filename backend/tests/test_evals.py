@@ -17,7 +17,7 @@ from evals.schemas import EvalCase
 
 def test_fixtures_and_cases_load_with_expected_coverage():
     cases = load_cases()
-    assert len(cases) == 59
+    assert len(cases) == 69
     assert {case.group for case in cases} == {
         "retrieval",
         "evidence",
@@ -90,12 +90,18 @@ def test_json_report_redacts_sensitive_keys(tmp_path):
         {
             "password": "fixture-password-value",
             "jwt_token": "fixture-token-value",
+            "system_prompt": "fixture-system-prompt",
+            "prompt_injection_case_count": 6,
+            "prompt_version": "fixture-version",
             "safe": "可公开摘要",
         },
     )
     text = path.read_text(encoding="utf-8")
     assert "fixture-password-value" not in text
     assert "fixture-token-value" not in text
+    assert "fixture-system-prompt" not in text
+    assert '"prompt_injection_case_count": 6' in text
+    assert '"prompt_version": "fixture-version"' in text
     assert "可公开摘要" in text
 
 

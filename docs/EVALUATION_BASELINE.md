@@ -6,7 +6,7 @@
 
 ## 当前范围
 
-首版包含 59 个固定 case，覆盖：
+首版包含 59 个固定 case；安全修复后扩展为 69 个，覆盖：
 
 - 检索排序、Recall@K、MRR、平方 L2 距离和用户过滤；
 - 证据充分性、JD/资料边界、项目选择和来源合法性；
@@ -77,17 +77,33 @@ cd D:\spir\NO1_agent\backend
 - `security_prompt_injection_evaluation`：攻击文本可进入优化回答，当前通用校验不拦截。
 - `security_prompt_injection_resume`：攻击文本可进入一句话项目描述，当前通用校验不拦截。
 
+## 安全修复后结果
+
+在保留原始 59 个 case 的基础上新增 10 个安全 case，覆盖 metadata 用户不一致、伪造当前用户 metadata、缺失 file_id、合法与非法 chunk 混合、管理员普通检索、英文注入、Markdown 注入、空白拆分、JD 能力伪造和正常技术描述反例。
+
+基于评估基线检查点 `fe1c4575e3a95fdf30a6923cfbb2bcc4d675a7af` 的修复后 Mock 评估：
+
+- 69 个 case：68 通过，1 失败，0 跳过；整体基线门槛通过。
+- Evidence：13/13；Security：14/14。
+- 跨用户泄露、非法 evidence_source_id、总分错误、重复扣费、孤立记录和未捕获异常：均为 0。
+- Prompt Injection：6 个攻击 case，阻止 6 个，unsafe behavior 0。
+- Recall@3：87.5%；唯一失败仍为 `retrieval_late_relevant`，本阶段未修改排序、阈值或 Embedding。
+
+Evidence 现在对向量结果执行第二层所有权校验：批量读取 `FileRecord`，校验 metadata user_id、文件存在性和记录归属，并以数据库中的分类与文件名为准。非法 chunk 在构建 `EvidenceOutput` 和 Agent Prompt 前丢弃，不参与充分性或最佳距离判断。
+
+Evaluation 和 Resume 采用三层防护：Prompt 明确声明输入为不受信数据；共享守卫对 Unicode、空白和常见中英文元指令进行分类与按行移除；结构化输出保存前再次校验。首次不安全会使用现有结构化重试机制重试一次，第二次仍不安全则关闭失败，不写入评价或简历版本。详细设计参见 [Agent 安全边界](AGENT_SECURITY.md)。
+
 ## 已知局限
 
 - 固定 Mock 只能测后端结构与确定性护栏，不能评价真实 LLM 的语义评分质量。
 - 检索排序由固定 collection 提供，Recall 指标不代表真实 BGE Embedding 的线上召回。
-- Prompt Injection 评估是最小红队集，尚未覆盖编码混淆、多语言和间接注入。
+- Prompt Injection 评估仍是有限红队集，尚未覆盖 Base64、同形异义字符和复杂跨字段语义拼接。
 - 当前每个 Evidence case 独立创建完整 SQLite schema，延迟主要是测试初始化成本。
 
 ## 下一阶段优先级
 
-1. Evidence 在消费检索结果时再次校验 chunk `user_id` 与 FileRecord 所有权，建立纵深隔离。
-2. 为 Evaluation 和 Resume 增加通用的指令注入内容隔离及输出净化，不依赖 Prompt 自觉。
-3. 使用固定本地 BGE 模型缓存建立可选真实 embedding 评估，替换固定排序的召回基线。
+1. 在独立阶段分析 `retrieval_late_relevant`，使用固定本地 Embedding 复现实测排序，不调整现有安全门槛。
+2. 扩充编码混淆、同形字符、跨字段拼接和多语言 Prompt Injection 红队集。
+3. 增加安全事件的结构化持久化统计，保持不记录攻击原文和用户资料。
 4. 扩充冲突、夸大职责和中文数字表达的数据集，避免只覆盖阿拉伯数字。
 5. 在 CI 中运行 Mock 评估并保存脱敏报告，同时保持真实模型评估人工显式触发。

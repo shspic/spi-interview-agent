@@ -12,10 +12,20 @@ SENSITIVE_KEY_PATTERN = re.compile(
 )
 
 
+def _is_sensitive_key(key: str) -> bool:
+    if key == "prompt_version":
+        return False
+    if key.startswith("prompt_injection_") and key.endswith(
+        ("_count", "_rate")
+    ):
+        return False
+    return bool(SENSITIVE_KEY_PATTERN.search(key))
+
+
 def _sanitize(value: Any) -> Any:
     if isinstance(value, dict):
         return {
-            key: "[REDACTED]" if SENSITIVE_KEY_PATTERN.search(key) else _sanitize(item)
+            key: "[REDACTED]" if _is_sensitive_key(key) else _sanitize(item)
             for key, item in value.items()
         }
     if isinstance(value, list):
