@@ -31,6 +31,7 @@ from app.services.upload_security import (
     sanitize_display_filename,
     stage_upload,
 )
+from auth_test_utils import cookie_headers, prepare_preauth
 
 
 def assert_security_headers(response):
@@ -62,10 +63,11 @@ def login(client, username="alice", password="secure-pass-123"):
         json={"username": username, "password": password},
     )
     assert response.status_code == 200
-    return {"Authorization": f"Bearer {response.json()['access_token']}"}
+    return cookie_headers(client)
 
 
 def register_and_login(client, username="alice"):
+    prepare_preauth(client)
     response = register(client, username=username)
     assert response.status_code == 201
     return login(client, username=username)
@@ -671,7 +673,7 @@ def test_validation_500_and_request_id_are_safely_shaped(
 def test_cors_allows_configured_origin_and_rejects_malicious_origin(client):
     preflight_headers = {
         "Access-Control-Request-Method": "POST",
-        "Access-Control-Request-Headers": "Authorization,Content-Type",
+        "Access-Control-Request-Headers": "X-CSRF-Token,Content-Type",
     }
     trusted = client.options(
         "/api/chat/ask",

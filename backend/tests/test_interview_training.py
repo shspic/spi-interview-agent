@@ -1,4 +1,5 @@
 from datetime import datetime
+from auth_test_utils import cookie_headers, prepare_preauth
 
 import pytest
 from sqlalchemy.exc import IntegrityError
@@ -47,6 +48,7 @@ def mock_interview_agents(monkeypatch):
 
 
 def register_and_login(client, username):
+    prepare_preauth(client)
     register_response = client.post(
         "/api/auth/register",
         json={
@@ -64,7 +66,7 @@ def register_and_login(client, username):
     assert login_response.status_code == 200
     payload = login_response.json()
     return (
-        {"Authorization": f"Bearer {payload['access_token']}"},
+        cookie_headers(client),
         payload["user"]["id"],
     )
 

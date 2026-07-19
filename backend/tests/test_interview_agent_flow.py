@@ -1,4 +1,5 @@
 from datetime import datetime
+from auth_test_utils import cookie_headers, prepare_preauth
 
 import pytest
 
@@ -76,6 +77,7 @@ class FakeInterviewLLM:
 
 
 def register_and_login(client, username):
+    prepare_preauth(client)
     response = client.post(
         "/api/auth/register",
         json={
@@ -91,7 +93,7 @@ def register_and_login(client, username):
     )
     payload = response.json()
     return (
-        {"Authorization": f"Bearer {payload['access_token']}"},
+        cookie_headers(client),
         payload["user"]["id"],
     )
 

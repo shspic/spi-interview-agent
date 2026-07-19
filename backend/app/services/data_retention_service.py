@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.db.models import (
     AgentRun,
+    AuthSecurityEvent,
     DailyUsageCounter,
     FileRecord,
     HistoryRecord,
@@ -79,6 +80,10 @@ def preview_expired_data(db: Session, now: datetime | None = None) -> dict:
         or 0,
         "daily_usage_counters": db.query(func.count(DailyUsageCounter.id))
         .filter(DailyUsageCounter.usage_date < cutoff_date)
+        .scalar()
+        or 0,
+        "auth_security_events": db.query(func.count(AuthSecurityEvent.id))
+        .filter(AuthSecurityEvent.created_at < cutoff_text)
         .scalar()
         or 0,
     }
@@ -161,6 +166,9 @@ def cleanup_expired_data(db: Session, now: datetime | None = None) -> dict:
         ),
         "daily_usage_counters": db.query(DailyUsageCounter).filter(
             DailyUsageCounter.usage_date < cutoff_date
+        ),
+        "auth_security_events": db.query(AuthSecurityEvent).filter(
+            AuthSecurityEvent.created_at < cutoff_text
         ),
     }
     for name, query in deletion_queries.items():

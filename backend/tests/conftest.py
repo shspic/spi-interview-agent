@@ -47,12 +47,27 @@ def client(db_session, monkeypatch):
         "test-jwt-secret-key-with-sufficient-length",
     )
     monkeypatch.setattr(settings, "jwt_expire_minutes", 120)
+    monkeypatch.setattr(settings, "auth_csrf_secret", "test-csrf-secret-with-sufficient-length")
+    monkeypatch.setattr(settings, "auth_cookie_secure", False)
+    monkeypatch.setattr(settings, "app_environment", "test")
 
     def override_get_db():
         yield db_session
 
     app.dependency_overrides[get_db] = override_get_db
     test_client = TestClient(app)
+    test_client.get("/api/auth/csrf")
+
+    def add_csrf_header(request):
+        csrf_token = test_client.cookies.get(settings.auth_csrf_cookie_name)
+        if (
+            csrf_token
+            and request.method in {"POST", "PUT", "PATCH", "DELETE"}
+            and "X-CSRF-Token" not in request.headers
+        ):
+            request.headers["X-CSRF-Token"] = csrf_token
+
+    test_client.event_hooks["request"].append(add_csrf_header)
 
     try:
         yield test_client

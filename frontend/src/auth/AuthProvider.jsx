@@ -1,21 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import apiClient, {
-  clearStoredToken,
-  getStoredToken,
-  saveStoredToken,
-  setUnauthorizedHandler,
-} from "../api/client";
+import apiClient, { ensureCsrf, setUnauthorizedHandler } from "../api/client";
 import { AuthContext } from "./authContext";
 
 function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
-  const [token, setToken] = useState(() => getStoredToken());
   const [isLoading, setIsLoading] = useState(true);
 
   const clearAuth = useCallback(() => {
-    clearStoredToken();
-    setToken(null);
     setCurrentUser(null);
   }, []);
 
@@ -23,69 +15,63 @@ function AuthProvider({ children }) {
 
   useEffect(() => {
     let active = true;
-
     const restoreSession = async () => {
-      const storedToken = getStoredToken();
-
-      if (!storedToken) {
-        if (active) {
-          setIsLoading(false);
-        }
-        return;
-      }
-
       try {
+        await ensureCsrf();
         const response = await apiClient.get("/api/auth/me");
-
         if (active) {
-          setToken(storedToken);
           setCurrentUser(response.data.user);
         }
       } catch {
-        clearAuth();
+        if (active) {
+          clearAuth();
+        }
       } finally {
         if (active) {
           setIsLoading(false);
         }
       }
     };
-
     restoreSession();
-
     return () => {
       active = false;
     };
   }, [clearAuth]);
 
   const login = useCallback(async ({ username, password }) => {
-    const response = await apiClient.post("/api/auth/login", {
-      username,
-      password,
-    });
-    const accessToken = response.data.access_token;
-
-    saveStoredToken(accessToken);
-    setToken(accessToken);
+    await ensureCsrf();
+    const response = await apiClient.post("/api/auth/login", { username, password });
     setCurrentUser(response.data.user);
-
     return response.data.user;
   }, []);
 
   const register = useCallback(
     async ({ username, password, inviteCode }) => {
+      await ensureCsrf();
       await apiClient.post("/api/auth/register", {
         username,
         password,
         invite_code: inviteCode,
       });
-
       return login({ username, password });
     },
     [login],
   );
 
-  const logout = useCallback(() => {
-    clearAuth();
+  const logout = useCallback(async () => {
+    try {
+      await apiClient.post("/api/auth/logout");
+    } finally {
+      clearAuth();
+    }
+  }, [clearAuth]);
+
+  const logoutAll = useCallback(async () => {
+    try {
+      await apiClient.post("/api/auth/logout-all");
+    } finally {
+      clearAuth();
+    }
   }, [clearAuth]);
 
   const refreshCurrentUser = useCallback(async () => {
@@ -102,23 +88,15 @@ function AuthProvider({ children }) {
   const value = useMemo(
     () => ({
       currentUser,
-      token,
-      isAuthenticated: Boolean(token && currentUser),
+      isAuthenticated: Boolean(currentUser),
       isLoading,
       login,
       register,
       logout,
+      logoutAll,
       refreshCurrentUser,
     }),
-    [
-      currentUser,
-      isLoading,
-      login,
-      logout,
-      refreshCurrentUser,
-      register,
-      token,
-    ],
+    [currentUser, isLoading, login, logout, logoutAll, refreshCurrentUser, register],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

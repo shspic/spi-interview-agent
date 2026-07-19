@@ -1,4 +1,5 @@
 from datetime import datetime
+from auth_test_utils import cookie_headers, prepare_preauth
 
 from app.core.config import settings
 from app.db.models import FileRecord, TargetJob, UserProfile
@@ -7,6 +8,7 @@ PASSWORD = "strong-password-123"
 
 
 def register_and_login(client, username):
+    prepare_preauth(client)
     register_response = client.post(
         "/api/auth/register",
         json={
@@ -25,7 +27,7 @@ def register_and_login(client, username):
     payload = login_response.json()
 
     return (
-        {"Authorization": f"Bearer {payload['access_token']}"},
+        cookie_headers(client),
         payload["user"]["id"],
     )
 

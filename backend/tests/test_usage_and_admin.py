@@ -5,7 +5,8 @@ import pytest
 from app.api import chat as chat_api
 from app.api import jobs as jobs_api
 from app.core.config import settings
-from app.core.security import create_access_token, hash_password, verify_password
+from app.core.security import hash_password, verify_password
+from auth_test_utils import session_headers
 from app.db.models import (
     AdminAuditLog,
     DailyUsageCounter,
@@ -47,8 +48,8 @@ def add_user(
     return user
 
 
-def auth_headers(user: User) -> dict:
-    return {"Authorization": f"Bearer {create_access_token(user.id)}"}
+def auth_headers(db_session, user: User) -> dict:
+    return session_headers(db_session, user)
 
 
 def test_usage_reservation_commit_idempotency_and_user_isolation(
@@ -151,7 +152,7 @@ def test_chat_success_counts_and_failure_releases(
     monkeypatch,
 ):
     user = add_user(db_session, "chat_user")
-    headers = auth_headers(user)
+    headers = auth_headers(db_session, user)
     monkeypatch.setattr(
         chat_api,
         "ask_with_rag",
@@ -199,7 +200,7 @@ def test_usage_me_only_returns_current_user(client, db_session):
     reservation = reserve_usage(db_session, second.id, "chat", "other")
     commit_usage(db_session, reservation)
 
-    response = client.get("/api/usage/me", headers=auth_headers(first))
+    response = client.get("/api/usage/me", headers=auth_headers(db_session, first))
     assert response.status_code == 200
     payload = response.json()
     assert payload["timezone"] == "Asia/Shanghai"
@@ -213,7 +214,7 @@ def test_job_analysis_counts_and_api_limit_returns_structured_429(
     monkeypatch,
 ):
     user = add_user(db_session, "job_usage")
-    headers = auth_headers(user)
+    headers = auth_headers(db_session, user)
     monkeypatch.setattr(
         jobs_api,
         "analyze_job",
@@ -248,8 +249,8 @@ def test_admin_access_user_list_and_disable_invalidates_existing_jwt(
 ):
     admin = add_user(db_session, "admin_one", is_admin=True)
     user = add_user(db_session, "normal_one")
-    admin_headers = auth_headers(admin)
-    user_headers = auth_headers(user)
+    admin_headers = auth_headers(db_session, admin)
+    user_headers = auth_headers(db_session, user)
 
     assert client.get("/api/admin/users").status_code == 401
     assert client.get("/api/admin/users", headers=user_headers).status_code == 403
@@ -263,7 +264,7 @@ def test_admin_access_user_list_and_disable_invalidates_existing_jwt(
         json={"is_active": False},
     )
     assert response.status_code == 200
-    assert client.get("/api/auth/me", headers=user_headers).status_code == 403
+    assert client.get("/api/auth/me", headers=user_headers).status_code == 401
     assert client.patch(
         f"/api/admin/users/{user.id}/status",
         headers=admin_headers,
@@ -277,7 +278,7 @@ def test_admin_access_user_list_and_disable_invalidates_existing_jwt(
 
 def test_last_admin_protection_and_self_delete_are_rejected(client, db_session):
     admin = add_user(db_session, "only_admin", is_admin=True)
-    headers = auth_headers(admin)
+    headers = auth_headers(db_session, admin)
     assert client.patch(
         f"/api/admin/users/{admin.id}/status",
         headers=headers,
@@ -305,7 +306,7 @@ def test_admin_password_reset_uses_hash_and_does_not_leak_password(
     )
     response = client.post(
         f"/api/admin/users/{user.id}/reset-password",
-        headers=auth_headers(admin),
+        headers=auth_headers(db_session, admin),
         json={"new_password": new_password},
     )
     assert response.status_code == 200
@@ -323,7 +324,7 @@ def test_invite_code_is_hashed_and_admin_update_invalidates_old_code(
 ):
     admin = add_user(db_session, "invite_admin", is_admin=True)
     user = add_user(db_session, "invite_normal")
-    headers = auth_headers(admin)
+    headers = auth_headers(db_session, admin)
     new_code = "new-test-invite"
     response = client.put(
         "/api/admin/settings/registration/invite-code",
@@ -343,7 +344,7 @@ def test_invite_code_is_hashed_and_admin_update_invalidates_old_code(
     assert new_code not in status_response.text
     assert client.put(
         "/api/admin/settings/registration/invite-code",
-        headers=auth_headers(user),
+        headers=auth_headers(db_session, user),
         json={"invite_code": "another-code"},
     ).status_code == 403
 
@@ -430,7 +431,7 @@ def test_delete_user_cleans_files_vectors_and_database_without_cross_user_damage
     mismatch = client.request(
         "DELETE",
         f"/api/admin/users/{target.id}",
-        headers=auth_headers(admin),
+        headers=auth_headers(db_session, admin),
         json={"confirm_username": "wrong_username"},
     )
     assert mismatch.status_code == 422
@@ -438,7 +439,7 @@ def test_delete_user_cleans_files_vectors_and_database_without_cross_user_damage
     response = client.request(
         "DELETE",
         f"/api/admin/users/{target.id}",
-        headers=auth_headers(admin),
+        headers=auth_headers(db_session, admin),
         json={"confirm_username": target.username},
     )
     assert response.status_code == 200
@@ -488,7 +489,7 @@ def test_delete_user_reports_vector_failure_without_claiming_success(
     response = client.request(
         "DELETE",
         f"/api/admin/users/{target.id}",
-        headers=auth_headers(admin),
+        headers=auth_headers(db_session, admin),
         json={"confirm_username": target.username},
     )
 

@@ -19,6 +19,7 @@ from app.db.models import (
     UserProfile,
 )
 from app.services.admin_audit_service import add_admin_audit_log
+from app.services.auth_session_service import record_auth_event, revoke_all_sessions
 from app.services.usage_service import get_user_usage
 from app.services.vector_store import delete_user_vectors
 from app.services.upload_security import (
@@ -118,6 +119,9 @@ def set_user_active_status(
             if active_admin_count <= 1:
                 raise AdminServiceError(409, "不能禁用最后一个可用管理员")
         user.is_active = is_active
+        if not is_active:
+            revoke_all_sessions(db, user.id, "account_disabled")
+            record_auth_event(db, "account_disabled", user_id=user.id)
         add_admin_audit_log(
             db,
             admin_user_id=admin.id,
@@ -157,6 +161,8 @@ def reset_user_password(
         user = get_admin_user(db, user_id)
         validate_password(new_password)
         user.password_hash = hash_password(new_password)
+        revoke_all_sessions(db, user.id, "admin_password_reset")
+        record_auth_event(db, "admin_password_reset", user_id=user.id)
         add_admin_audit_log(
             db,
             admin_user_id=admin.id,

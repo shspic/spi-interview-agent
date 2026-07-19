@@ -1,5 +1,7 @@
 # SPI面试Agent
 
+> 浏览器认证已改为 HttpOnly Access/Refresh Cookie、服务端可撤销会话和会话绑定 CSRF，不再把 JWT 保存到 `localStorage`。本地与生产配置见 [认证与会话安全](docs/AUTH_SESSION_SECURITY.md)。
+
 SPI面试Agent 是一个面向 AI 应用开发实习求职场景的智能面试训练与岗位匹配系统。
 
 项目基于 FastAPI、React、SQLite、ChromaDB、DeepSeek、Tavily 和 LangGraph 构建，支持本地知识库管理、RAG 问答、岗位 JD 分析、模拟面试评价、联网搜索增强和 Agent 自动路由。

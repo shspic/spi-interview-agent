@@ -46,7 +46,33 @@ class Settings(BaseModel):
 
     registration_invite_code: str = os.getenv("REGISTRATION_INVITE_CODE", "")
     jwt_secret_key: str = os.getenv("JWT_SECRET_KEY", "")
-    jwt_expire_minutes: int = int(os.getenv("JWT_EXPIRE_MINUTES", "120"))
+    jwt_expire_minutes: int = int(os.getenv("AUTH_ACCESS_TOKEN_MINUTES", "15"))
+    auth_refresh_token_days: int = Field(
+        default=int(os.getenv("AUTH_REFRESH_TOKEN_DAYS", "7")), ge=1, le=90
+    )
+    auth_max_active_sessions: int = Field(
+        default=int(os.getenv("AUTH_MAX_ACTIVE_SESSIONS", "5")), ge=1, le=50
+    )
+    auth_cookie_secure: bool = os.getenv("AUTH_COOKIE_SECURE", "false").lower() == "true"
+    auth_cookie_samesite: str = os.getenv("AUTH_COOKIE_SAMESITE", "lax")
+    auth_cookie_domain: str | None = os.getenv("AUTH_COOKIE_DOMAIN", "").strip() or None
+    auth_access_cookie_name: str = os.getenv(
+        "AUTH_ACCESS_COOKIE_NAME", "spi_access"
+    )
+    auth_refresh_cookie_name: str = os.getenv(
+        "AUTH_REFRESH_COOKIE_NAME", "spi_refresh"
+    )
+    auth_csrf_cookie_name: str = os.getenv("AUTH_CSRF_COOKIE_NAME", "spi_csrf")
+    auth_access_cookie_path: str = "/api"
+    auth_refresh_cookie_path: str = "/api/auth"
+    auth_csrf_cookie_path: str = "/"
+    auth_csrf_secret: str = os.getenv(
+        "AUTH_CSRF_SECRET",
+        os.getenv("JWT_SECRET_KEY", ""),
+    )
+    auth_require_origin_check: bool = (
+        os.getenv("AUTH_REQUIRE_ORIGIN_CHECK", "true").lower() == "true"
+    )
     app_timezone: str = os.getenv("APP_TIMEZONE", "Asia/Shanghai")
     daily_chat_limit: int = int(os.getenv("DAILY_CHAT_LIMIT", "10"))
     daily_job_analysis_limit: int = int(
@@ -213,6 +239,30 @@ class Settings(BaseModel):
                 raise ValueError("CORS_ALLOWED_ORIGINS 必须是明确的 HTTP(S) 来源")
             if not parsed.netloc or parsed.path not in {"", "/"}:
                 raise ValueError("CORS_ALLOWED_ORIGINS 不得包含路径")
+
+        same_site = self.auth_cookie_samesite.strip().lower()
+        if same_site not in {"lax", "strict", "none"}:
+            raise ValueError("AUTH_COOKIE_SAMESITE 只能是 lax、strict 或 none")
+        if same_site == "none" and not self.auth_cookie_secure:
+            raise ValueError("AUTH_COOKIE_SAMESITE=none 时必须启用 Secure Cookie")
+        self.auth_cookie_samesite = same_site
+
+        if environment == "production" and not self.auth_cookie_secure:
+            raise ValueError("生产环境必须启用 Secure Cookie")
+        if environment == "production" and self.auth_csrf_secret.strip() in {
+            "",
+            "change-me",
+            self.jwt_secret_key.strip(),
+        }:
+            raise ValueError("生产环境必须配置独立的 AUTH_CSRF_SECRET")
+
+        cookie_names = {
+            self.auth_access_cookie_name,
+            self.auth_refresh_cookie_name,
+            self.auth_csrf_cookie_name,
+        }
+        if len(cookie_names) != 3 or any(not name.strip() for name in cookie_names):
+            raise ValueError("认证 Cookie 名称必须非空且互不相同")
 
         if self.max_request_body_mb < self.max_upload_file_size_mb:
             raise ValueError("MAX_REQUEST_BODY_MB 不得小于 MAX_UPLOAD_FILE_SIZE_MB")

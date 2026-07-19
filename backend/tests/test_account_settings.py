@@ -1,7 +1,8 @@
 from datetime import datetime
 
 from app.core.config import settings
-from app.core.security import create_access_token, hash_password
+from app.core.security import hash_password
+from auth_test_utils import session_headers
 from app.db.models import (
     DailyUsageCounter,
     FileRecord,
@@ -35,8 +36,8 @@ def add_user(db_session, username: str) -> User:
     return user
 
 
-def auth_headers(user: User) -> dict:
-    return {"Authorization": f"Bearer {create_access_token(user.id)}"}
+def auth_headers(db_session, user: User) -> dict:
+    return session_headers(db_session, user)
 
 
 def test_user_can_change_password_and_old_password_stops_working(client, db_session):
@@ -44,7 +45,7 @@ def test_user_can_change_password_and_old_password_stops_working(client, db_sess
 
     response = client.post(
         "/api/auth/change-password",
-        headers=auth_headers(user),
+        headers=auth_headers(db_session, user),
         json={
             "current_password": OLD_PASSWORD,
             "new_password": NEW_PASSWORD,
@@ -54,6 +55,7 @@ def test_user_can_change_password_and_old_password_stops_working(client, db_sess
 
     assert response.status_code == 200
     assert response.json()["success"] is True
+    client.get("/api/auth/csrf")
     old_login = client.post(
         "/api/auth/login",
         json={"username": user.username, "password": OLD_PASSWORD},
@@ -68,7 +70,7 @@ def test_user_can_change_password_and_old_password_stops_working(client, db_sess
 
 def test_change_password_rejects_wrong_same_and_extra_fields(client, db_session):
     user = add_user(db_session, "change_rejected")
-    common = {"headers": auth_headers(user)}
+    common = {"headers": auth_headers(db_session, user)}
 
     wrong = client.post(
         "/api/auth/change-password",
@@ -211,12 +213,12 @@ def test_cleanup_preview_and_execution_are_user_scoped_and_keep_configuration(
 
     preview = client.post(
         "/api/account/data-cleanup-preview",
-        headers=auth_headers(first),
+        headers=auth_headers(db_session, first),
         json={},
     )
     forged = client.post(
         "/api/account/data-cleanup-preview",
-        headers=auth_headers(first),
+        headers=auth_headers(db_session, first),
         json={"user_id": second.id},
     )
     assert preview.status_code == 200
@@ -225,7 +227,7 @@ def test_cleanup_preview_and_execution_are_user_scoped_and_keep_configuration(
 
     response = client.post(
         "/api/account/data-cleanup",
-        headers=auth_headers(first),
+        headers=auth_headers(db_session, first),
         json={"current_password": OLD_PASSWORD, "confirm": "DELETE_MY_DATA"},
     )
     assert response.status_code == 200
@@ -247,7 +249,7 @@ def test_cleanup_preview_and_execution_are_user_scoped_and_keep_configuration(
 
     repeated = client.post(
         "/api/account/data-cleanup",
-        headers=auth_headers(first),
+        headers=auth_headers(db_session, first),
         json={"current_password": OLD_PASSWORD, "confirm": "DELETE_MY_DATA"},
     )
     assert repeated.status_code == 200
@@ -270,12 +272,12 @@ def test_cleanup_rejects_bad_credentials_and_reports_vector_failure(
 
     wrong_password = client.post(
         "/api/account/data-cleanup",
-        headers=auth_headers(user),
+        headers=auth_headers(db_session, user),
         json={"current_password": "wrong-password", "confirm": "DELETE_MY_DATA"},
     )
     wrong_confirm = client.post(
         "/api/account/data-cleanup",
-        headers=auth_headers(user),
+        headers=auth_headers(db_session, user),
         json={"current_password": OLD_PASSWORD, "confirm": "wrong"},
     )
     assert wrong_password.status_code == 400
@@ -288,7 +290,7 @@ def test_cleanup_rejects_bad_credentials_and_reports_vector_failure(
     )
     response = client.post(
         "/api/account/data-cleanup",
-        headers=auth_headers(user),
+        headers=auth_headers(db_session, user),
         json={"current_password": OLD_PASSWORD, "confirm": "DELETE_MY_DATA"},
     )
     assert response.status_code == 200

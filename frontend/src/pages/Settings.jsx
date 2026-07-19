@@ -13,7 +13,7 @@ import { formatDateTime } from "../utils/format";
 const CLEANUP_CONFIRMATION = "DELETE_MY_DATA";
 
 function Settings({ onDataCleaned }) {
-  const { currentUser, logout } = useAuth();
+  const { currentUser, logout, logoutAll } = useAuth();
   const [profile, setProfile] = useState(null);
   const [profileError, setProfileError] = useState("");
   const [passwordForm, setPasswordForm] = useState({
@@ -148,6 +148,17 @@ function Settings({ onDataCleaned }) {
           {passwordMessage && <p className="inline-success" role="status">{passwordMessage}</p>}
           <button type="submit" disabled={passwordLoading}>{passwordLoading ? "提交中..." : "修改密码"}</button>
         </form>
+        <button
+          type="button"
+          className="secondary-button"
+          onClick={() => {
+            if (window.confirm("确认退出所有设备？所有登录会话都会立即失效。")) {
+              logoutAll();
+            }
+          }}
+        >
+          退出所有设备
+        </button>
       </div>
 
       <div className="settings-section danger-zone">

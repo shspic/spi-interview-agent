@@ -37,6 +37,11 @@ class User(Base):
         back_populates="user",
         cascade="all, delete-orphan",
     )
+    auth_sessions = relationship(
+        "AuthSession",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
 
 
 class UserProfile(Base):
@@ -600,6 +605,53 @@ class UsageEvent(Base):
     completed_at = Column(Text, nullable=True)
     created_at = Column(Text, nullable=False)
     updated_at = Column(Text, nullable=False)
+
+
+class AuthSession(Base):
+    __tablename__ = "auth_sessions"
+    __table_args__ = (
+        Index("ix_auth_sessions_user_revoked", "user_id", "revoked_at"),
+        Index("ix_auth_sessions_expires_at", "expires_at"),
+        Index("ix_auth_sessions_revoked_at", "revoked_at"),
+    )
+
+    id = Column(Text, primary_key=True)
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    refresh_token_hash = Column(Text, nullable=False)
+    csrf_token_hash = Column(Text, nullable=False)
+    created_at = Column(Text, nullable=False)
+    last_seen_at = Column(Text, nullable=False)
+    expires_at = Column(Text, nullable=False)
+    revoked_at = Column(Text, nullable=True)
+    revoke_reason = Column(Text, nullable=True)
+    token_version = Column(Integer, nullable=False, default=1, server_default="1")
+    user_agent_hash = Column(Text, nullable=True)
+    user = relationship("User", back_populates="auth_sessions")
+
+
+class AuthSecurityEvent(Base):
+    __tablename__ = "auth_security_events"
+    __table_args__ = (
+        Index("ix_auth_security_events_user_created", "user_id", "created_at"),
+        Index("ix_auth_security_events_type_created", "event_type", "created_at"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    event_type = Column(Text, nullable=False, index=True)
+    status = Column(Text, nullable=False)
+    session_ref = Column(Text, nullable=True)
+    created_at = Column(Text, nullable=False, index=True)
 
 
 class RateLimitBucket(Base):

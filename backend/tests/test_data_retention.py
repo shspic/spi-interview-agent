@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from app.core.config import settings
-from app.core.security import create_access_token
+from auth_test_utils import session_headers
 from app.db.models import (
     AdminAuditLog,
     FileRecord,
@@ -32,8 +32,8 @@ def add_user(db_session, username: str, is_admin: bool = False) -> User:
     return user
 
 
-def headers(user: User) -> dict:
-    return {"Authorization": f"Bearer {create_access_token(user.id)}"}
+def headers(db_session, user: User) -> dict:
+    return session_headers(db_session, user)
 
 
 def add_session_tree(db_session, user_id: int, created_at: str) -> InterviewSession:
@@ -187,7 +187,7 @@ def test_cleanup_preview_preserves_data_and_cleanup_respects_retention_scope(
 
     preview = client.post(
         "/api/admin/maintenance/cleanup-preview",
-        headers=headers(admin),
+        headers=headers(db_session, admin),
     )
     assert preview.status_code == 200
     assert preview.json()["estimated_counts"]["files"] == 2
@@ -196,7 +196,7 @@ def test_cleanup_preview_preserves_data_and_cleanup_respects_retention_scope(
 
     response = client.post(
         "/api/admin/maintenance/cleanup",
-        headers=headers(admin),
+        headers=headers(db_session, admin),
         json={"confirm": "DELETE_EXPIRED_DATA"},
     )
     assert response.status_code == 200
@@ -226,7 +226,7 @@ def test_cleanup_preview_preserves_data_and_cleanup_respects_retention_scope(
 
     repeated = client.post(
         "/api/admin/maintenance/cleanup",
-        headers=headers(admin),
+        headers=headers(db_session, admin),
         json={"confirm": "DELETE_EXPIRED_DATA"},
     )
     assert repeated.status_code == 200
@@ -269,7 +269,7 @@ def test_cleanup_reports_vector_failure_and_keeps_file_record(
 
     response = client.post(
         "/api/admin/maintenance/cleanup",
-        headers=headers(admin),
+        headers=headers(db_session, admin),
         json={"confirm": "DELETE_EXPIRED_DATA"},
     )
     assert response.status_code == 200

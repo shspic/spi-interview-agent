@@ -1,5 +1,7 @@
 # API 与上传安全边界
 
+> 浏览器认证已迁移为 HttpOnly Cookie、可轮换 Refresh Token、服务端 AuthSession 与会话绑定 CSRF；CORS 请求头不再允许浏览器 Bearer。详见 [认证与会话安全](AUTH_SESSION_SECURITY.md)。
+
 本文记录当前 FastAPI 后端在朋友试用阶段的安全边界。实现目标是限制不可信请求的资源消耗和数据访问范围，不等同于 WAF、恶意软件扫描或完整渗透测试。
 
 ## 1. 威胁边界

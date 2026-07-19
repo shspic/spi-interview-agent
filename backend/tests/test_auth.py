@@ -78,13 +78,10 @@ def test_correct_password_can_login(client):
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["token_type"] == "bearer"
-    assert payload["access_token"]
+    assert "token_type" not in payload
+    assert "access_token" not in payload
 
-    me_response = client.get(
-        "/api/auth/me",
-        headers={"Authorization": f"Bearer {payload['access_token']}"},
-    )
+    me_response = client.get("/api/auth/me")
     assert me_response.status_code == 200
     assert me_response.json()["user"]["username"] == "alice"
 
@@ -98,7 +95,7 @@ def test_wrong_password_cannot_login(client):
     )
 
     assert response.status_code == 401
-    assert response.json()["detail"] == "用户名或密码错误"
+    assert response.json()["error_code"] == "invalid_credentials"
 
 
 @pytest.mark.parametrize(
@@ -126,4 +123,4 @@ def test_unauthenticated_request_cannot_access_protected_api(
     response = client.request(method, path, json=payload)
 
     assert response.status_code == 401
-    assert response.json()["detail"] == "请先登录"
+    assert response.json()["error_code"] == "auth_required"

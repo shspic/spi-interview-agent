@@ -169,6 +169,8 @@ def test_training_tables_are_added_without_changing_existing_user(
         "user_data_deletion_logs",
         "rate_limit_buckets",
         "upload_reservations",
+        "auth_sessions",
+        "auth_security_events",
     }.issubset(set(inspector.get_table_names()))
     session_columns = {
         column["name"] for column in inspector.get_columns("interview_sessions")

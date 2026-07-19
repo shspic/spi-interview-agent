@@ -1,5 +1,6 @@
 import json
 from datetime import datetime
+from auth_test_utils import cookie_headers, prepare_preauth
 
 import pytest
 
@@ -32,6 +33,7 @@ DIMENSIONS = {
 
 
 def register_and_login(client, username):
+    prepare_preauth(client)
     assert client.post(
         "/api/auth/register",
         json={
@@ -45,7 +47,7 @@ def register_and_login(client, username):
         json={"username": username, "password": PASSWORD},
     ).json()
     return (
-        {"Authorization": f"Bearer {payload['access_token']}"},
+        cookie_headers(client),
         payload["user"]["id"],
     )
 

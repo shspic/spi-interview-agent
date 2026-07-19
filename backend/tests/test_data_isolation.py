@@ -1,6 +1,7 @@
 from datetime import datetime
 
-from app.core.security import create_access_token, hash_password
+from app.core.security import hash_password
+from auth_test_utils import session_headers
 from app.db.models import FileRecord, HistoryRecord, InterviewRecord, User
 
 
@@ -19,9 +20,8 @@ def create_user(db_session, username):
     return user
 
 
-def auth_headers(user):
-    token = create_access_token(user.id)
-    return {"Authorization": f"Bearer {token}"}
+def auth_headers(db_session, user):
+    return session_headers(db_session, user)
 
 
 def create_file_record(db_session, user, file_path, file_id="file-b"):
@@ -49,7 +49,7 @@ def test_user_cannot_view_another_users_files(client, db_session, tmp_path):
     file_path.write_text("private", encoding="utf-8")
     create_file_record(db_session, user_b, file_path)
 
-    response = client.get("/api/files", headers=auth_headers(user_a))
+    response = client.get("/api/files", headers=auth_headers(db_session, user_a))
 
     assert response.status_code == 200
     assert response.json()["files"] == []
@@ -79,7 +79,7 @@ def test_user_cannot_delete_another_users_file(
 
     response = client.delete(
         f"/api/files/{record.file_id}",
-        headers=auth_headers(user_a),
+        headers=auth_headers(db_session, user_a),
     )
 
     assert response.status_code == 404
@@ -129,7 +129,7 @@ def test_user_cannot_view_another_users_history_or_interview(
     )
     db_session.add_all([history, interview])
     db_session.commit()
-    headers = auth_headers(user_a)
+    headers = auth_headers(db_session, user_a)
 
     history_response = client.get(
         f"/api/history/{history.record_id}",
