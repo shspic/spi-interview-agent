@@ -1,7 +1,8 @@
 import pytest
 
+from app.core.config import settings
 from app.core.security import verify_password
-from app.db.models import User
+from app.db.models import RegistrationSetting, User
 
 VALID_PASSWORD = "strong-password-123"
 
@@ -17,11 +18,29 @@ def register(client, username="alice", invite_code="test-invite-code"):
     )
 
 
-def test_correct_invite_code_can_register(client):
+def test_correct_invite_code_can_register(client, db_session):
     response = register(client)
 
     assert response.status_code == 201
     assert response.json()["user"]["username"] == "alice"
+    registration_setting = db_session.get(RegistrationSetting, 1)
+    assert registration_setting.invite_code_hash != "test-invite-code"
+    assert verify_password(
+        "test-invite-code",
+        registration_setting.invite_code_hash,
+    )
+
+
+def test_missing_invite_configuration_returns_controlled_503(
+    client,
+    monkeypatch,
+):
+    monkeypatch.setattr(settings, "registration_invite_code", "")
+
+    response = register(client)
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "注册邀请码尚未配置"
 
 
 def test_wrong_invite_code_cannot_register(client):

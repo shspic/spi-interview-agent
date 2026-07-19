@@ -12,7 +12,8 @@ from app.agents.schemas import (
     EvidenceOutput,
 )
 from app.agents.structured_llm import StructuredLLMError
-from app.db.models import AgentRun, InterviewSession, InterviewTurn
+from app.core.config import settings
+from app.db.models import AgentRun, InterviewSession, InterviewTurn, UsageEvent
 from app.services.evaluation_service import (
     calculate_total_score,
     summarize_completed_session,
@@ -234,6 +235,11 @@ def test_scores_total_conflicts_and_full_response_are_saved(
     stored = db_session.get(InterviewTurn, turn["id"])
     assert stored.total_score == 76
     assert stored.unsupported_claims == ["独立负责全部架构"]
+    assert db_session.query(UsageEvent).filter_by(
+        user_id=user_id,
+        usage_type="interview_evaluation",
+        status="succeeded",
+    ).count() == 1
     evaluation_run = (
         db_session.query(AgentRun)
         .filter_by(
@@ -361,6 +367,10 @@ def test_invalid_evaluation_retries_once_and_preserves_answer(
     db_session.refresh(stored)
     assert stored.answered_at == answered_at
     assert stored.total_score == 76
+    assert db_session.query(UsageEvent).filter_by(
+        usage_type="interview_evaluation",
+        status="succeeded",
+    ).count() == 1
 
 
 def test_retry_after_interviewer_failure_reuses_existing_evaluation(
@@ -384,8 +394,37 @@ def test_retry_after_interviewer_failure_reuses_existing_evaluation(
     recovered = answer(client, headers, session_id, turn["id"])
 
     assert recovered.status_code == 200
+    assert db_session.query(UsageEvent).filter_by(
+        usage_type="interview_evaluation",
+        status="succeeded",
+    ).count() == 1
     assert retry_llm.evaluation_calls == 0
     assert db_session.query(InterviewTurn).filter_by(session_id=session_id).count() == 2
+
+
+def test_evaluation_limit_preserves_answer_and_can_recover(
+    client,
+    db_session,
+    monkeypatch,
+):
+    install_flow(monkeypatch, EvaluationFlowLLM())
+    headers, _ = register_and_login(client, "alice")
+    session_id, turn = create_and_start(client, headers)
+    monkeypatch.setattr(settings, "daily_interview_evaluation_limit", 0)
+
+    limited = answer(client, headers, session_id, turn["id"])
+
+    assert limited.status_code == 429
+    assert limited.json()["detail"]["usage_type"] == "interview_evaluation"
+    stored = db_session.get(InterviewTurn, turn["id"])
+    assert stored.user_answer == "我主要负责检索模块。"
+    assert stored.total_score is None
+
+    monkeypatch.setattr(settings, "daily_interview_evaluation_limit", 1)
+    recovered = answer(client, headers, session_id, turn["id"])
+    assert recovered.status_code == 200
+    db_session.refresh(stored)
+    assert stored.total_score == 76
 
 
 def test_supervisor_receives_evaluation_summary_and_can_follow_up(

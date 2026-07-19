@@ -162,6 +162,10 @@ def test_training_tables_are_added_without_changing_existing_user(
         "improvement_tasks",
         "agent_runs",
         "resume_project_descriptions",
+        "usage_events",
+        "daily_usage_counters",
+        "registration_settings",
+        "admin_audit_logs",
     }.issubset(set(inspector.get_table_names()))
     session_columns = {
         column["name"] for column in inspector.get_columns("interview_sessions")

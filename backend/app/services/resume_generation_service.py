@@ -1,4 +1,5 @@
 import json
+from uuid import uuid4
 
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -25,6 +26,7 @@ from app.db.models import (
 )
 from app.services.interview_session_service import now_iso
 from app.services.resume_evidence_service import retrieve_resume_evidence
+from app.services.usage_service import commit_usage, release_usage, reserve_usage
 
 
 class ResumeGenerationError(Exception):
@@ -74,13 +76,23 @@ def generate_resume_project_description(
 
     agent = ResumeAgent()
     runtime = InterviewAgentRuntime(db, user_id, interview_session.id)
+    reservation = reserve_usage(
+        db,
+        user_id,
+        "resume_generation",
+        f"resume-generation:{uuid4()}",
+        related_resource_type="interview_session",
+        related_resource_id=interview_session.id,
+    )
     try:
         output = runtime.execute(agent, lambda: agent.generate(payload))
     except Exception as exc:
+        release_usage(db, reservation, type(exc).__name__)
         raise ResumeGenerationError(
             502,
             "简历项目描述生成失败，请核对资料后重试",
         ) from exc
+    commit_usage(db, reservation)
 
     now = now_iso()
     description = ResumeProjectDescription(

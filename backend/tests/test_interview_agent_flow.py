@@ -5,7 +5,13 @@ import pytest
 from app.agents import evidence_agent, structured_llm
 from app.agents.schemas import EvidenceItem, EvidenceOutput, InterviewPlanOutput
 from app.agents.structured_llm import StructuredLLMError, invoke_structured
-from app.db.models import AgentRun, FileRecord, InterviewSession, InterviewTurn
+from app.db.models import (
+    AgentRun,
+    FileRecord,
+    InterviewSession,
+    InterviewTurn,
+    UsageEvent,
+)
 from app.services import evidence_retrieval_service
 
 PASSWORD = "strong-password-123"
@@ -190,6 +196,11 @@ def test_quick_start_generates_first_question_and_agent_runs(
     ]
     assert all(run.prompt_version and run.latency_ms >= 0 for run in runs)
     assert all(run.status == "success" and run.error is None for run in runs)
+    assert db_session.query(UsageEvent).filter_by(
+        user_id=user_id,
+        usage_type="multi_agent_task",
+        status="succeeded",
+    ).count() == 1
 
 
 def test_standard_start_uses_five_question_plan(client, monkeypatch):
@@ -215,6 +226,10 @@ def test_repeated_start_does_not_duplicate_first_question(
     assert start_session(client, headers, session_id).status_code == 200
     assert start_session(client, headers, session_id).status_code == 409
     assert db_session.query(InterviewTurn).filter_by(session_id=session_id).count() == 1
+    assert db_session.query(UsageEvent).filter_by(
+        usage_type="multi_agent_task",
+        status="succeeded",
+    ).count() == 1
 
 
 def test_user_cannot_start_or_answer_another_users_session(client, monkeypatch):

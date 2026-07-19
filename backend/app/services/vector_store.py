@@ -71,6 +71,11 @@ def delete_file_vectors(user_id: int, file_id: str) -> None:
     )
 
 
+def delete_user_vectors(user_id: int) -> None:
+    collection = get_collection()
+    collection.delete(where=get_user_filter(user_id))
+
+
 def rebuild_vector_store(db: Session, user_id: int) -> dict[str, Any]:
     collection = get_collection()
     collection.delete(where=get_user_filter(user_id))

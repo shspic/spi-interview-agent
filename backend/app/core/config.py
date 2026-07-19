@@ -33,6 +33,18 @@ class Settings(BaseModel):
     registration_invite_code: str = os.getenv("REGISTRATION_INVITE_CODE", "")
     jwt_secret_key: str = os.getenv("JWT_SECRET_KEY", "")
     jwt_expire_minutes: int = int(os.getenv("JWT_EXPIRE_MINUTES", "120"))
+    app_timezone: str = os.getenv("APP_TIMEZONE", "Asia/Shanghai")
+    daily_chat_limit: int = int(os.getenv("DAILY_CHAT_LIMIT", "10"))
+    daily_job_analysis_limit: int = int(
+        os.getenv("DAILY_JOB_ANALYSIS_LIMIT", "3")
+    )
+    daily_interview_evaluation_limit: int = int(
+        os.getenv("DAILY_INTERVIEW_EVALUATION_LIMIT", "5")
+    )
+    daily_multi_agent_task_limit: int = int(
+        os.getenv("DAILY_MULTI_AGENT_TASK_LIMIT", "3")
+    )
+    data_retention_days: int = int(os.getenv("DATA_RETENTION_DAYS", "7"))
 
 
 settings = Settings()

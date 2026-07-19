@@ -19,6 +19,7 @@ from app.db.models import (
     FileRecord,
     InterviewSession,
     ResumeProjectDescription,
+    UsageEvent,
 )
 from app.services import resume_evidence_service
 from app.services.interview_session_service import create_interview_turn
@@ -329,6 +330,11 @@ def test_completed_session_generates_and_records_resume_agent(
     assert run.prompt_version == "interview-resume-v1.0.0"
     assert run.status == "success"
     assert run.latency_ms >= 0
+    assert db_session.query(UsageEvent).filter_by(
+        user_id=user_id,
+        usage_type="resume_generation",
+        status="succeeded",
+    ).count() == 1
 
 
 def test_unfinished_or_other_users_session_is_rejected(client, db_session):

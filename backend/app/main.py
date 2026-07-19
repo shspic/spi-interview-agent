@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.health import router as health_router
-from app.db.database import init_db
+from app.db.database import SessionLocal, init_db
 from app.api.files import router as files_router
 from app.api.knowledge import router as knowledge_router
 from app.api.llm import router as llm_router
@@ -24,11 +24,24 @@ from app.api.improvement_tasks import router as improvement_tasks_router
 from app.api.resume_project_descriptions import (
     router as resume_project_descriptions_router,
 )
+from app.api.admin import router as admin_router
+from app.api.usage import router as usage_router
+from app.services.registration_setting_service import (
+    RegistrationSettingError,
+    ensure_registration_setting,
+)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    db = SessionLocal()
+    try:
+        ensure_registration_setting(db)
+    except RegistrationSettingError:
+        db.rollback()
+    finally:
+        db.close()
     yield
 
 
@@ -69,3 +82,5 @@ app.include_router(
     prefix="/api",
     tags=["简历项目描述"],
 )
+app.include_router(usage_router, prefix="/api", tags=["用户用量"])
+app.include_router(admin_router, prefix="/api", tags=["管理员"])

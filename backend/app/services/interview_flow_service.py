@@ -30,6 +30,12 @@ from app.services.evaluation_service import (
     load_turn_evaluation,
     summarize_completed_session,
 )
+from app.services.usage_service import (
+    UsageReservation,
+    commit_usage,
+    release_usage,
+    reserve_usage,
+)
 
 
 class InterviewFlowError(Exception):
@@ -339,6 +345,16 @@ def answer_interview_turn(
 
     plan = _load_plan(interview_session)
     existing_evaluation = load_turn_evaluation(current_turn)
+    evaluation_reservation: UsageReservation | None = None
+    if existing_evaluation is None:
+        evaluation_reservation = reserve_usage(
+            db,
+            user_id,
+            "interview_evaluation",
+            f"interview-turn:{turn_id}",
+            related_resource_type="interview_turn",
+            related_resource_id=turn_id,
+        )
     follow_up_count = (
         db.query(InterviewTurn)
         .filter(
@@ -381,6 +397,21 @@ def answer_interview_turn(
             if failed_summary["agents"]
             else None
         )
+        if evaluation_reservation is not None:
+            recovered_turn = db.get(InterviewTurn, turn_id)
+            recovered_evaluation = (
+                load_turn_evaluation(recovered_turn)
+                if recovered_turn is not None
+                else None
+            )
+            if recovered_evaluation is not None:
+                commit_usage(db, evaluation_reservation)
+            else:
+                release_usage(
+                    db,
+                    evaluation_reservation,
+                    type(exc).__name__,
+                )
         detail = (
             "回答评价失败，原回答已保存，可使用相同答案重试"
             if failed_agent == "evaluation"
@@ -391,6 +422,8 @@ def answer_interview_turn(
             detail,
         ) from exc
 
+    if evaluation_reservation is not None:
+        commit_usage(db, evaluation_reservation)
     decision = state["decision"]
     evaluation = state["evaluation"]
     summary = _build_success_summary(runtime, state)

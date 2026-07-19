@@ -1,8 +1,7 @@
-import hmac
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -18,17 +17,25 @@ from app.core.security import (
 )
 from app.db.database import get_db
 from app.db.models import User
+from app.services.registration_setting_service import (
+    RegistrationSettingError,
+    verify_registration_invite,
+)
 
 router = APIRouter()
 
 
 class RegisterRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     username: str
     password: str
     invite_code: str
 
 
 class LoginRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     username: str
     password: str
 
@@ -49,18 +56,15 @@ def register_user(
     request: RegisterRequest,
     db: Session = Depends(get_db),
 ):
-    configured_invite_code = settings.registration_invite_code.strip()
-
-    if not configured_invite_code or configured_invite_code == "change-me":
+    try:
+        invite_is_valid = verify_registration_invite(db, request.invite_code)
+    except RegistrationSettingError as exc:
         raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="注册功能尚未配置",
-        )
+            status_code=exc.status_code,
+            detail=exc.detail,
+        ) from exc
 
-    if not hmac.compare_digest(
-        request.invite_code.encode("utf-8"),
-        configured_invite_code.encode("utf-8"),
-    ):
+    if not invite_is_valid:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="邀请码无效",

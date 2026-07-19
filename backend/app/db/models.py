@@ -535,3 +535,139 @@ class ResumeProjectDescription(Base):
     prompt_version = Column(Text, nullable=False)
     created_at = Column(Text, nullable=False, index=True)
     updated_at = Column(Text, nullable=False)
+
+
+class UsageEvent(Base):
+    __tablename__ = "usage_events"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "usage_type",
+            "idempotency_key",
+            name="uq_usage_events_user_type_key",
+        ),
+        CheckConstraint(
+            "usage_type IN ('chat', 'job_analysis', 'interview_evaluation', "
+            "'multi_agent_task', 'resume_generation', 'llm_call', "
+            "'embedding_call', 'web_search')",
+            name="ck_usage_events_type",
+        ),
+        CheckConstraint(
+            "status IN ('reserved', 'succeeded', 'released', 'failed')",
+            name="ck_usage_events_status",
+        ),
+        CheckConstraint("amount > 0", name="ck_usage_events_amount"),
+        Index(
+            "ix_usage_events_user_date_type_status",
+            "user_id",
+            "usage_date",
+            "usage_type",
+            "status",
+        ),
+        Index("ix_usage_events_date_type", "usage_date", "usage_type"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    usage_type = Column(Text, nullable=False, index=True)
+    usage_date = Column(Text, nullable=False, index=True)
+    idempotency_key = Column(Text, nullable=False)
+    status = Column(Text, nullable=False, index=True)
+    amount = Column(Integer, nullable=False, default=1)
+    related_resource_type = Column(Text, nullable=True)
+    related_resource_id = Column(Text, nullable=True)
+    error_type = Column(Text, nullable=True)
+    reserved_at = Column(Text, nullable=False)
+    completed_at = Column(Text, nullable=True)
+    created_at = Column(Text, nullable=False)
+    updated_at = Column(Text, nullable=False)
+
+
+class DailyUsageCounter(Base):
+    __tablename__ = "daily_usage_counters"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "usage_type",
+            "usage_date",
+            name="uq_daily_usage_counters_user_type_date",
+        ),
+        CheckConstraint("used >= 0", name="ck_daily_usage_counters_used"),
+        CheckConstraint(
+            "reserved >= 0",
+            name="ck_daily_usage_counters_reserved",
+        ),
+        Index(
+            "ix_daily_usage_counters_date_type",
+            "usage_date",
+            "usage_type",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    usage_type = Column(Text, nullable=False, index=True)
+    usage_date = Column(Text, nullable=False, index=True)
+    used = Column(Integer, nullable=False, default=0)
+    reserved = Column(Integer, nullable=False, default=0)
+    updated_at = Column(Text, nullable=False)
+
+
+class RegistrationSetting(Base):
+    __tablename__ = "registration_settings"
+    __table_args__ = (
+        CheckConstraint("id = 1", name="ck_registration_settings_singleton"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    invite_code_hash = Column(Text, nullable=False)
+    updated_at = Column(Text, nullable=False)
+    updated_by = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
+
+class AdminAuditLog(Base):
+    __tablename__ = "admin_audit_logs"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('success', 'failed')",
+            name="ck_admin_audit_logs_status",
+        ),
+        Index("ix_admin_audit_logs_admin_created", "admin_user_id", "created_at"),
+        Index("ix_admin_audit_logs_target_created", "target_user_id", "created_at"),
+        Index("ix_admin_audit_logs_action_created", "action", "created_at"),
+        Index("ix_admin_audit_logs_status_created", "status", "created_at"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    admin_user_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    action = Column(Text, nullable=False, index=True)
+    target_user_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    resource_type = Column(Text, nullable=False)
+    resource_id = Column(Text, nullable=True)
+    status = Column(Text, nullable=False, index=True)
+    detail_summary = Column(Text, nullable=False, default="")
+    created_at = Column(Text, nullable=False, index=True)

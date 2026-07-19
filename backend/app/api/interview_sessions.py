@@ -55,6 +55,12 @@ from app.services.interview_session_service import (
     list_interview_sessions,
     update_interview_session,
 )
+from app.services.usage_service import (
+    UsageServiceError,
+    commit_usage,
+    release_usage,
+    reserve_usage,
+)
 
 router = APIRouter()
 
@@ -417,16 +423,34 @@ def start_session(
     current_user: User = Depends(get_current_user),
 ):
     try:
+        reservation = reserve_usage(
+            db,
+            current_user.id,
+            "multi_agent_task",
+            f"interview-session:{session_id}",
+            related_resource_type="interview_session",
+            related_resource_id=session_id,
+        )
+    except UsageServiceError as error:
+        raise HTTPException(
+            status_code=error.status_code,
+            detail=error.detail,
+        ) from error
+    try:
         result = start_interview_flow(
             db,
             current_user.id,
             session_id,
         )
     except (InterviewFlowError, InterviewTrainingServiceError) as error:
+        if not reservation.already_succeeded:
+            release_usage(db, reservation, type(error).__name__)
         raise HTTPException(
             status_code=error.status_code,
             detail=error.detail,
         ) from error
+    if not reservation.already_succeeded:
+        commit_usage(db, reservation)
     base = session_to_response(db, current_user.id, result.interview_session)
     return InterviewStartResponse(
         **base.model_dump(),
@@ -458,7 +482,11 @@ def answer_session_question(
             request.turn_id,
             request.answer,
         )
-    except (InterviewFlowError, InterviewTrainingServiceError) as error:
+    except (
+        InterviewFlowError,
+        InterviewTrainingServiceError,
+        UsageServiceError,
+    ) as error:
         raise HTTPException(
             status_code=error.status_code,
             detail=error.detail,
