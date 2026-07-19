@@ -38,7 +38,7 @@ def mock_interview_agents(monkeypatch):
     monkeypatch.setattr(structured_llm, "chat_with_messages", fake_llm)
     monkeypatch.setattr(
         evidence_retrieval_service,
-        "search_similar_chunks",
+        "search_candidate_chunks",
         lambda **kwargs: {
             "chunks": [],
             "distance_metric": "l2_squared",

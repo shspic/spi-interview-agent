@@ -85,10 +85,18 @@ def _create_session(
     return session
 
 
-def _retrieve(db_session, monkeypatch, user: User, session, chunks):
+def _retrieve(
+    db_session,
+    monkeypatch,
+    user: User,
+    session,
+    chunks,
+    *,
+    top_k=6,
+):
     monkeypatch.setattr(
         evidence_retrieval_service,
-        "search_similar_chunks",
+        "search_candidate_chunks",
         lambda **kwargs: {"chunks": chunks},
     )
     return evidence_retrieval_service.retrieve_interview_evidence(
@@ -96,6 +104,7 @@ def _retrieve(db_session, monkeypatch, user: User, session, chunks):
         user.id,
         session.id,
         "项目技术实现",
+        top_k=top_k,
     )
 
 
@@ -155,6 +164,54 @@ def test_evidence_ownership_is_batched_and_uses_database_truth(
     assert "跨用户内容" not in caplog.text
     assert "foreign-project" not in caplog.text
     assert "file_owner_mismatch" in caplog.text
+
+
+def test_ownership_filter_can_fill_from_later_legal_candidate(
+    db_session,
+    monkeypatch,
+):
+    user_a = _create_user(db_session, "candidate-alice")
+    user_b = _create_user(db_session, "candidate-bob")
+    own_file = _create_file(db_session, user_a, "later-owned")
+    foreign_files = [
+        _create_file(db_session, user_b, f"early-foreign-{index}")
+        for index in range(3)
+    ]
+    session = _create_session(db_session, user_a)
+    chunks = [
+        {
+            "content": "跨用户候选",
+            "metadata": {
+                "file_id": record.file_id,
+                "user_id": user_a.id,
+                "chunk_index": 0,
+            },
+            "distance": 0.1 + index * 0.1,
+        }
+        for index, record in enumerate(foreign_files)
+    ]
+    chunks.append(
+        {
+            "content": "项目技术实现",
+            "metadata": {
+                "file_id": own_file.file_id,
+                "user_id": user_a.id,
+                "chunk_index": 0,
+            },
+            "distance": 0.4,
+        }
+    )
+
+    output = _retrieve(
+        db_session,
+        monkeypatch,
+        user_a,
+        session,
+        chunks,
+        top_k=1,
+    )
+
+    assert [item.source_id for item in output.sources] == ["later-owned:0"]
 
 
 @pytest.mark.parametrize(

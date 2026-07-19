@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 
 from dotenv import load_dotenv
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 BASE_DIR = Path(__file__).resolve().parents[2]
 if os.getenv("SKIP_DOTENV") != "1":
@@ -20,6 +20,16 @@ class Settings(BaseModel):
     )
     evidence_max_distance: float = float(
         os.getenv("EVIDENCE_MAX_DISTANCE", "0.8")
+    )
+    retrieval_candidate_multiplier: int = Field(
+        default=int(os.getenv("RETRIEVAL_CANDIDATE_MULTIPLIER", "3")),
+        ge=1,
+        le=10,
+    )
+    retrieval_max_candidates: int = Field(
+        default=int(os.getenv("RETRIEVAL_MAX_CANDIDATES", "20")),
+        ge=1,
+        le=100,
     )
 
     deepseek_api_key: str = os.getenv("DEEPSEEK_API_KEY", "")

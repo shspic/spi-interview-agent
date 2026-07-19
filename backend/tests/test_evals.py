@@ -17,7 +17,7 @@ from evals.schemas import EvalCase
 
 def test_fixtures_and_cases_load_with_expected_coverage():
     cases = load_cases()
-    assert len(cases) == 69
+    assert len(cases) == 81
     assert {case.group for case in cases} == {
         "retrieval",
         "evidence",
@@ -152,7 +152,13 @@ def test_mock_retrieval_group_does_not_access_network(monkeypatch, tmp_path):
 
     monkeypatch.setattr(socket.socket, "connect", block_network)
     summary, _, output_dir = run_evaluations({"retrieval"}, tmp_path)
-    assert summary.total == 8
+    assert summary.total == 20
+    retrieval_group = next(
+        group for group in summary.groups if group.group == "retrieval"
+    )
+    assert retrieval_group.metrics["ordering_stable"] == 1
+    assert retrieval_group.metrics["candidate_pool_size"] >= 1
+    assert "rerank_latency_ms" in retrieval_group.metrics
     assert (output_dir / "summary.json").exists()
     assert (output_dir / "cases.json").exists()
     assert (output_dir / "report.md").exists()

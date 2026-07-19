@@ -78,16 +78,24 @@ class FixtureCollection:
     def __init__(self, chunks: list[dict]):
         self.chunks = chunks
         self.query_kwargs = None
+        self.user_filtered_count = 0
 
     def query(self, **kwargs):
         self.query_kwargs = kwargs
         expected_user_id = (kwargs.get("where") or {}).get("user_id")
+        self.user_filtered_count = sum(
+            expected_user_id is not None
+            and item.get("metadata", {}).get("user_id") != expected_user_id
+            for item in self.chunks
+        )
         chunks = [
             item
             for item in self.chunks
             if expected_user_id is None
             or item.get("metadata", {}).get("user_id") == expected_user_id
         ]
+        n_results = kwargs.get("n_results", len(chunks))
+        chunks = chunks[:n_results]
         return {
             "documents": [[item["content"] for item in chunks]],
             "metadatas": [[item["metadata"] for item in chunks]],
@@ -138,17 +146,33 @@ def run_retrieval_case(case: EvalCase) -> tuple[bool, str, dict]:
             return_value=FakeEmbeddingModel(),
         ),
     ):
-        result = vector_store.search_similar_chunks(
-            query=case.input["query"],
-            user_id=case.input["user_id"],
-            top_k=case.input.get("top_k", 5),
-        )
+        search_kwargs = {
+            "query": case.input["query"],
+            "user_id": case.input["user_id"],
+            "top_k": case.input.get("top_k", 5),
+            "allowed_categories": (
+                set(case.input["allowed_categories"])
+                if "allowed_categories" in case.input
+                else None
+            ),
+            "trusted_file_names": case.input.get("trusted_file_names"),
+        }
+        result = vector_store.search_similar_chunks(**search_kwargs)
+        repeated_result = vector_store.search_similar_chunks(**search_kwargs)
     ranked = [_source_id(item) for item in result["chunks"]]
+    repeated_ranked = [
+        _source_id(item) for item in repeated_result["chunks"]
+    ]
     relevant = set(case.expected.get("relevant_source_ids", []))
     forbidden = set(case.expected.get("forbidden_source_ids", []))
     where_ok = collection.query_kwargs.get("where") == {
         "user_id": case.input["user_id"]
     }
+    retrieval_stats = result.get("retrieval_stats", {})
+    candidate_count = int(retrieval_stats.get("candidate_count", 0))
+    duplicate_filtered_count = int(
+        retrieval_stats.get("duplicate_filtered_count", 0)
+    )
     metrics = {
         "recall_at_1": recall_at_k(ranked, relevant, 1),
         "recall_at_3": recall_at_k(ranked, relevant, 3),
@@ -162,11 +186,47 @@ def run_retrieval_case(case: EvalCase) -> tuple[bool, str, dict]:
         "user_filter_applied": where_ok,
         "forbidden_hit_count": len(set(ranked) & forbidden),
         "distance_metric": result["distance_metric"],
+        "candidate_pool_size": int(
+            retrieval_stats.get("candidate_pool_size", 0)
+        ),
+        "final_result_size": len(ranked),
+        "distance_filtered_count": int(
+            retrieval_stats.get("distance_filtered_count", 0)
+        ),
+        "metadata_filtered_count": int(
+            retrieval_stats.get("metadata_filtered_count", 0)
+        ),
+        "ownership_filtered_count": collection.user_filtered_count,
+        "category_filtered_count": int(
+            retrieval_stats.get("category_filtered_count", 0)
+        ),
+        "duplicate_filtered_count": duplicate_filtered_count,
+        "near_duplicate_penalty_count": int(
+            retrieval_stats.get("near_duplicate_penalty_count", 0)
+        ),
+        "duplicate_ratio": (
+            duplicate_filtered_count / candidate_count
+            if candidate_count
+            else 0.0
+        ),
+        "rerank_latency_ms": float(retrieval_stats.get("latency_ms", 0)),
+        "ordering_stable": ranked == repeated_ranked,
     }
+    expected_prefix = case.expected.get("expected_ranked_prefix", [])
+    expected_final_count = case.expected.get("expected_final_count")
     passed = (
         where_ok
         and not set(ranked) & forbidden
+        and metrics["ordering_stable"]
+        and metrics["recall_at_1"]
+        >= case.expected.get("min_recall_at_1", 0)
         and metrics["recall_at_3"] >= case.expected.get("min_recall_at_3", 0)
+        and metrics["recall_at_5"] >= case.expected.get("min_recall_at_5", 0)
+        and ranked[:len(expected_prefix)] == expected_prefix
+        and (
+            expected_final_count is None
+            or len(ranked) == expected_final_count
+        )
     )
     return passed, "检索排序与过滤符合预期" if passed else "检索排序或隔离不符合预期", metrics
 
@@ -273,7 +333,7 @@ def _run_evidence(case: EvalCase) -> tuple[EvidenceOutput, list[dict]]:
         db.refresh(session)
         with patch.object(
             evidence_retrieval_service,
-            "search_similar_chunks",
+            "search_candidate_chunks",
             return_value={"chunks": chunks},
         ):
             output = evidence_retrieval_service.retrieve_interview_evidence(

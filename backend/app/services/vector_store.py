@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.db.models import FileRecord
 from app.services.document_loader import load_document_text
+from app.services.retrieval_ranking import candidate_pool_size, rerank_chunks
 from app.services.text_splitter import split_text
 
 COLLECTION_NAME = "personal_knowledge_base"
@@ -165,16 +166,18 @@ def rebuild_vector_store(db: Session, user_id: int) -> dict[str, Any]:
     }
 
 
-def search_similar_chunks(
+def search_candidate_chunks(
     query: str,
     user_id: int,
-    top_k: int = 5,
+    candidate_k: int,
 ) -> dict[str, Any]:
     if not query.strip():
         raise ValueError("query 不能为空")
 
-    if top_k <= 0:
-        raise ValueError("top_k 必须大于 0")
+    if candidate_k <= 0:
+        raise ValueError("candidate_k 必须大于 0")
+    if candidate_k > settings.retrieval_max_candidates:
+        raise ValueError("candidate_k 不能超过最大候选数量")
 
     collection = get_collection()
     model = get_embedding_model()
@@ -186,7 +189,7 @@ def search_similar_chunks(
 
     result = collection.query(
         query_embeddings=query_embedding,
-        n_results=top_k,
+        n_results=candidate_k,
         where=get_user_filter(user_id),
         include=["documents", "metadatas", "distances"],
     )
@@ -196,21 +199,77 @@ def search_similar_chunks(
     distances = result.get("distances", [[]])[0]
 
     chunks = []
+    metadata_filtered_count = 0
 
     for index, document in enumerate(documents):
+        metadata = metadatas[index] if index < len(metadatas) else {}
+        if not isinstance(metadata, dict):
+            metadata_filtered_count += 1
+            continue
+        metadata_user_id = metadata.get("user_id")
+        file_id = metadata.get("file_id")
+        if (
+            not isinstance(metadata_user_id, int)
+            or isinstance(metadata_user_id, bool)
+            or metadata_user_id != user_id
+            or not isinstance(file_id, str)
+            or not file_id.strip()
+        ):
+            metadata_filtered_count += 1
+            continue
         chunks.append(
             {
                 "content": document,
-                "metadata": metadatas[index] if index < len(metadatas) else {},
+                "metadata": metadata,
                 "distance": distances[index] if index < len(distances) else None,
             }
         )
 
     return {
         "query": query,
-        "top_k": top_k,
+        "candidate_k": candidate_k,
         "distance_metric": DISTANCE_METRIC,
         "chunks": chunks,
+        "retrieval_stats": {
+            "candidate_pool_size": len(documents),
+            "metadata_filtered_count": metadata_filtered_count,
+        },
+    }
+
+
+def search_similar_chunks(
+    query: str,
+    user_id: int,
+    top_k: int = 5,
+    *,
+    allowed_categories: set[str] | None = None,
+    trusted_file_names: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    candidate_k = candidate_pool_size(
+        top_k,
+        settings.retrieval_candidate_multiplier,
+        settings.retrieval_max_candidates,
+    )
+    candidate_result = search_candidate_chunks(query, user_id, candidate_k)
+    ranked, ranking_stats = rerank_chunks(
+        query,
+        candidate_result["chunks"],
+        top_k=top_k,
+        distance_threshold=settings.evidence_max_distance,
+        trusted_file_names=trusted_file_names,
+        allowed_categories=allowed_categories,
+    )
+    stats = {
+        **candidate_result["retrieval_stats"],
+        **ranking_stats.as_dict(),
+    }
+    return {
+        "query": query,
+        "top_k": top_k,
+        "candidate_k": candidate_k,
+        "distance_metric": DISTANCE_METRIC,
+        "chunks": ranked,
+        "retrieval_stats": stats,
     }
 
 

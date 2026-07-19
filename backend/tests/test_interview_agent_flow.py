@@ -389,7 +389,7 @@ def test_insufficient_evidence_uses_open_question_without_fabrication(
     monkeypatch.setattr(structured_llm, "chat_with_messages", fake_llm)
     monkeypatch.setattr(
         evidence_retrieval_service,
-        "search_similar_chunks",
+        "search_candidate_chunks",
         lambda **kwargs: {"chunks": [], "distance_metric": "l2_squared"},
     )
     headers, _ = register_and_login(client, "alice")
@@ -428,7 +428,7 @@ def test_evidence_retrieval_forces_user_filter_and_rejects_low_relevance(
     db_session.commit()
     captured = {}
 
-    def fake_search(query, user_id, top_k):
+    def fake_search(query, user_id, candidate_k):
         captured["user_id"] = user_id
         return {
             "chunks": [
@@ -445,7 +445,7 @@ def test_evidence_retrieval_forces_user_filter_and_rejects_low_relevance(
 
     monkeypatch.setattr(
         evidence_retrieval_service,
-        "search_similar_chunks",
+        "search_candidate_chunks",
         fake_search,
     )
     result = evidence_retrieval_service.retrieve_interview_evidence(

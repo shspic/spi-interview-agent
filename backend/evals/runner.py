@@ -29,6 +29,10 @@ def _git_commit() -> str:
 
 def _aggregate_metrics(results: list[CaseResult]) -> dict[str, float | int]:
     retrieval = [item for item in results if item.group == "retrieval"]
+    rerank_latencies = [
+        float(item.metrics.get("rerank_latency_ms", 0))
+        for item in retrieval
+    ]
     evidence = [item for item in results if item.group == "evidence"]
     supervisor = [item for item in results if item.group == "supervisor"]
     evaluation = [item for item in results if item.group == "evaluation"]
@@ -73,6 +77,58 @@ def _aggregate_metrics(results: list[CaseResult]) -> dict[str, float | int]:
         "retrieval_recall_at_3": mean(
             float(item.metrics.get("recall_at_3", 0)) for item in retrieval
         ),
+        "retrieval_recall_at_1": mean(
+            float(item.metrics.get("recall_at_1", 0)) for item in retrieval
+        ),
+        "retrieval_recall_at_5": mean(
+            float(item.metrics.get("recall_at_5", 0)) for item in retrieval
+        ),
+        "retrieval_mrr": mean(
+            float(item.metrics.get("mrr", 0)) for item in retrieval
+        ),
+        "retrieval_irrelevant_ratio": mean(
+            float(item.metrics.get("irrelevant_ratio", 0))
+            for item in retrieval
+        ),
+        "retrieval_duplicate_ratio": mean(
+            float(item.metrics.get("duplicate_ratio", 0))
+            for item in retrieval
+        ),
+        "retrieval_average_candidate_pool_size": mean(
+            float(item.metrics.get("candidate_pool_size", 0))
+            for item in retrieval
+        ),
+        "retrieval_max_candidate_pool_size": max(
+            (
+                int(item.metrics.get("candidate_pool_size", 0))
+                for item in retrieval
+            ),
+            default=0,
+        ),
+        "retrieval_average_final_result_size": mean(
+            float(item.metrics.get("final_result_size", 0))
+            for item in retrieval
+        ),
+        "retrieval_distance_filtered_count": sum(
+            int(item.metrics.get("distance_filtered_count", 0))
+            for item in retrieval
+        ),
+        "retrieval_ownership_filtered_count": sum(
+            int(item.metrics.get("ownership_filtered_count", 0))
+            + int(item.metrics.get("metadata_filtered_count", 0))
+            for item in retrieval
+        ),
+        "retrieval_deduplicated_count": sum(
+            int(item.metrics.get("duplicate_filtered_count", 0))
+            for item in retrieval
+        ),
+        "retrieval_sort_instability_count": sum(
+            int(item.metrics.get("ordering_stable") is False)
+            for item in retrieval
+        ),
+        "retrieval_rerank_p50_ms": percentile(rerank_latencies, 50),
+        "retrieval_rerank_p95_ms": percentile(rerank_latencies, 95),
+        "retrieval_rerank_max_ms": round(max(rerank_latencies, default=0), 6),
         "evidence_sufficiency_accuracy": accuracy(
             item.metrics.get("sufficiency_correct") is True for item in evidence
         ),

@@ -6,7 +6,8 @@ from sqlalchemy.orm import Session
 from app.agents.schemas import EvidenceItem, EvidenceOutput
 from app.core.config import settings
 from app.db.models import FileRecord, InterviewSession, TargetJob, UserProfile
-from app.services.vector_store import DISTANCE_METRIC, search_similar_chunks
+from app.services.retrieval_ranking import candidate_pool_size, rerank_chunks
+from app.services.vector_store import DISTANCE_METRIC, search_candidate_chunks
 
 
 logger = logging.getLogger(__name__)
@@ -174,10 +175,15 @@ def retrieve_interview_evidence(
     job_requirements = _load_job_requirements(db, user_id, interview_session)
     search_error = None
     try:
-        search_result = search_similar_chunks(
+        candidate_k = candidate_pool_size(
+            top_k,
+            settings.retrieval_candidate_multiplier,
+            settings.retrieval_max_candidates,
+        )
+        search_result = search_candidate_chunks(
             query=query,
             user_id=user_id,
-            top_k=top_k,
+            candidate_k=candidate_k,
         )
         chunks = search_result.get("chunks", []) or []
     except Exception:
@@ -189,28 +195,64 @@ def retrieve_interview_evidence(
         float(chunk["distance"])
         for chunk, _record in owned_chunks
         if isinstance(chunk.get("distance"), (int, float))
+        and not isinstance(chunk.get("distance"), bool)
     ]
     best_distance = min(distances) if distances else None
     selected_projects = set(interview_session.selected_project_file_ids or [])
+    trusted_chunks = []
+    records_by_id = {}
+    for chunk, record in owned_chunks:
+        metadata = chunk.get("metadata") or {}
+        chunk_index = metadata.get("chunk_index")
+        if (
+            not isinstance(chunk_index, int)
+            or isinstance(chunk_index, bool)
+            or chunk_index < 0
+        ):
+            continue
+        if (
+            record.category == "project"
+            and selected_projects
+            and record.file_id not in selected_projects
+        ):
+            continue
+        records_by_id[record.file_id] = record
+        trusted_chunks.append(
+            {
+                "content": chunk.get("content"),
+                "distance": chunk.get("distance"),
+                "metadata": {
+                    "user_id": user_id,
+                    "file_id": record.file_id,
+                    "filename": record.filename,
+                    "file_type": record.file_type,
+                    "category": record.category,
+                    "chunk_index": chunk_index,
+                },
+            }
+        )
+
+    ranked_chunks, _ranking_stats = rerank_chunks(
+        query,
+        trusted_chunks,
+        top_k=top_k,
+        distance_threshold=settings.evidence_max_distance,
+        trusted_file_names={
+            file_id: record.filename
+            for file_id, record in records_by_id.items()
+        },
+        allowed_categories={"project", "resume"},
+    )
     project_evidence = []
     resume_evidence = []
 
-    for chunk, record in owned_chunks:
-        distance = chunk.get("distance")
-        if not isinstance(distance, (int, float)):
-            continue
-        if float(distance) > settings.evidence_max_distance:
-            continue
+    for chunk in ranked_chunks:
         metadata = chunk.get("metadata") or {}
-        file_id = record.file_id
+        file_id = metadata["file_id"]
+        record = records_by_id[file_id]
+        distance = float(chunk["distance"])
         chunk_index = metadata.get("chunk_index")
-        if not isinstance(chunk_index, int) or isinstance(chunk_index, bool) or chunk_index < 0:
-            continue
         category = record.category
-        if category == "project" and selected_projects and file_id not in selected_projects:
-            continue
-        if category not in {"project", "resume"}:
-            continue
         item = EvidenceItem(
             evidence_type=category,
             source_id=(
@@ -221,7 +263,7 @@ def retrieve_interview_evidence(
             filename=record.filename,
             chunk_index=chunk_index,
             content=str(chunk.get("content") or "")[:2000],
-            distance=float(distance),
+            distance=distance,
         )
         if category == "project":
             project_evidence.append(item)
