@@ -1,7 +1,9 @@
 import argparse
 import json
 import socket
+import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from pydantic import ValidationError
@@ -159,9 +161,140 @@ def test_mock_retrieval_group_does_not_access_network(monkeypatch, tmp_path):
     assert retrieval_group.metrics["ordering_stable"] == 1
     assert retrieval_group.metrics["candidate_pool_size"] >= 1
     assert "rerank_latency_ms" in retrieval_group.metrics
+    assert summary.baseline_passed is True
+    assert summary.selected_groups == ["retrieval"]
+    assert {group.group for group in summary.groups if group.status == "skipped"} == {
+        "evaluation",
+        "evidence",
+        "improvement",
+        "reliability",
+        "resume",
+        "security",
+        "supervisor",
+    }
     assert (output_dir / "summary.json").exists()
     assert (output_dir / "cases.json").exists()
     assert (output_dir / "report.md").exists()
+    report = (output_dir / "report.md").read_text(encoding="utf-8")
+    assert "已选择分组：retrieval" in report
+    assert "| evidence | skipped |" in report
+
+
+def test_selected_group_failure_still_fails_baseline(monkeypatch, tmp_path):
+    from evals import adapters, runner
+
+    case = EvalCase(
+        id="retrieval_failure",
+        group="retrieval",
+        description="检索失败",
+        input={},
+        expected={},
+    )
+    monkeypatch.setattr(runner, "load_cases", lambda groups: [case])
+    monkeypatch.setattr(
+        adapters,
+        "run_case",
+        lambda selected: (False, "失败", {"recall_at_3": 0.0}),
+    )
+    summary, _, _ = runner.run_evaluations({"retrieval"}, tmp_path)
+    assert summary.failed == 1
+    assert summary.baseline_passed is False
+    assert {item.metric for item in summary.baseline_checks} == {
+        "cross_user_leakage_count",
+        "invalid_evidence_source_count",
+        "uncaught_exception_count",
+        "retrieval_recall_at_3",
+    }
+
+
+def test_unconditional_safety_threshold_applies_to_single_group(monkeypatch, tmp_path):
+    from evals import adapters, runner
+
+    case = EvalCase(
+        id="retrieval_leak",
+        group="retrieval",
+        description="跨用户泄露",
+        input={},
+        expected={},
+    )
+    monkeypatch.setattr(runner, "load_cases", lambda groups: [case])
+    monkeypatch.setattr(
+        adapters,
+        "run_case",
+        lambda selected: (
+            True,
+            "case 自身通过",
+            {"recall_at_3": 1.0, "forbidden_hit_count": 1},
+        ),
+    )
+    summary, _, _ = runner.run_evaluations({"retrieval"}, tmp_path)
+    leakage = next(
+        item for item in summary.baseline_checks
+        if item.metric == "cross_user_leakage_count"
+    )
+    assert leakage.passed is False
+    assert summary.baseline_passed is False
+
+
+def test_full_evaluation_keeps_all_global_thresholds(monkeypatch, tmp_path):
+    from evals import adapters, runner
+    from evals.config import BASELINE_THRESHOLDS
+
+    cases = load_cases()
+    monkeypatch.setattr(runner, "load_cases", lambda groups: cases)
+    summary, _, _ = runner.run_evaluations(None, tmp_path)
+    assert {item.metric for item in summary.baseline_checks} == set(
+        BASELINE_THRESHOLDS
+    )
+    assert all(group.status == "passed" for group in summary.groups)
+
+
+def test_retrieval_group_cli_returns_zero(monkeypatch, tmp_path):
+    from evals import run_evals
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "run_evals",
+            "--group",
+            "retrieval",
+            "--output-dir",
+            str(tmp_path),
+        ],
+    )
+    assert run_evals.main() == 0
+
+
+def test_selected_group_cli_returns_nonzero_on_failure(monkeypatch, tmp_path):
+    from evals import run_evals, runner
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "run_evals",
+            "--group",
+            "retrieval",
+            "--output-dir",
+            str(tmp_path),
+        ],
+    )
+    monkeypatch.setattr(
+        runner,
+        "run_evaluations",
+        lambda *args, **kwargs: (
+            SimpleNamespace(
+                passed=0,
+                total=1,
+                baseline_passed=False,
+                failed=1,
+            ),
+            [],
+            tmp_path,
+        ),
+    )
+    assert run_evals.main() == 1
 
 
 def test_real_model_requires_explicit_switch_and_limits(monkeypatch):

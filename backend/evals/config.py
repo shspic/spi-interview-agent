@@ -35,6 +35,31 @@ BASELINE_THRESHOLDS = {
     "unsupported_technology_block_rate": ("min", 0.90),
 }
 
+UNCONDITIONAL_BASELINE_METRICS = {
+    "cross_user_leakage_count",
+    "invalid_evidence_source_count",
+    "uncaught_exception_count",
+}
+
+BASELINE_METRIC_GROUPS = {
+    "total_score_error_count": {"evaluation", "reliability"},
+    "follow_up_limit_violation_count": {"supervisor"},
+    "duplicate_charge_count": {"reliability"},
+    "orphan_record_count": {"reliability"},
+    "structured_output_success_rate": {
+        "evaluation",
+        "improvement",
+        "resume",
+        "reliability",
+    },
+    "retrieval_recall_at_3": {"retrieval"},
+    "evidence_sufficiency_accuracy": {"evidence"},
+    "supervisor_decision_accuracy": {"supervisor"},
+    "conflict_detection_accuracy": {"evaluation"},
+    "unsupported_number_block_rate": {"security"},
+    "unsupported_technology_block_rate": {"security"},
+}
+
 MAX_REAL_MODEL_CASES = 5
 MAX_REAL_MODEL_CALLS = 10
 
@@ -49,4 +74,3 @@ def configure_isolated_environment(work_dir: Path) -> None:
     os.environ["TAVILY_API_KEY"] = ""
     os.environ["REGISTRATION_INVITE_CODE"] = "eval-placeholder"
     os.environ["JWT_SECRET_KEY"] = "eval-placeholder-secret-not-for-production"
-

@@ -72,3 +72,9 @@ candidate_k = min(RETRIEVAL_MAX_CANDIDATES,
 - 轻量词项分析不等价于中文语义分词，也不能替代 Cross Encoder。
 - 70/30 权重只在固定离线集上验证，生产数据分布变化后需要独立校准。
 - 当前去重针对完全重复和同文件相邻近重复，不处理跨文件语义改写型重复。
+
+## 真实 BGE 校准结果
+
+隔离的 35 query / 48 chunk 合成集显示，Mock 的 100% Recall@3 不能外推到真实向量：纯距离 Recall@3 为 66.15%，当前完整重排为 69.79%；去重/多样性提升 3 个 case，未检测到退化，但当前 `0.8` 阈值 false reject rate 为 37.5%，并有 5 个 case 的部分相关来源未进入候选池。
+
+本阶段没有修改阈值、候选池或排序权重。阈值放宽到 0.9 会同时增加明显 false accept，候选倍数 4 也只减少 1 个截断 case，因此需要下一阶段独立分析，不能直接根据单一指标调参。完整方法与数据参见 [真实 Embedding 检索校准](RETRIEVAL_CALIBRATION.md)。

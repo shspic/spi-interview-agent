@@ -30,6 +30,7 @@ class CaseResult(StrictModel):
 
 class GroupResult(StrictModel):
     group: str
+    status: Literal["passed", "failed", "skipped"]
     total: int
     passed: int
     failed: int

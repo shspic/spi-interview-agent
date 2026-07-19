@@ -111,6 +111,16 @@ Evaluation 和 Resume 采用三层防护：Prompt 明确声明输入为不受信
 
 修复后完整 Mock 评估为 81/81：Retrieval 20/20、Evidence 13/13、Security 14/14。扩展检索集 Recall@1 为 89.17%、Recall@3 和 Recall@5 均为 100%、MRR 为 100%；原始 8 个检索 case 的 Recall@1 为 91.67%、Recall@3 和 Recall@5 均为 100%、MRR 为 100%。排序不稳定、跨用户泄露、非法 evidence source 和不安全 Prompt Injection 行为均为 0。完整评估中本地重排 P50 为 0.032ms、P95 为 0.048ms、最大 0.0631ms；fixture 实际最大候选池为 4，配置上限为 20。这些数字不包含真实 Embedding 和 Chroma 延迟。
 
+## 真实 Embedding 校准结果
+
+评估历史保留为：最初基线 54/59，安全修复后 68/69，检索排序后 81/81。上述数字全部是固定 Mock case。
+
+2026-07-19 使用本地缓存的 `BAAI/bge-small-zh-v1.5`、临时 Chroma/SQLite 和 35 query / 48 chunk 合成集完成首次真实校准。纯距离 Recall@1/3/5 为 64.58%/66.15%/68.75%，当前完整重排为 64.58%/69.79%/69.79%，Precision@3 为 27.62%，MRR 为 78.12%。跨用户泄露、非法 source_id 和排序不稳定均为 0。
+
+相关距离 P50/P95 为 0.6685/1.3427；当前 `0.8` 阈值 false reject 18/48、明显 false accept 8/71。候选池存在 5 个部分截断 case。受控模拟中，阈值 0.9 提高 Recall 但明显增加 false accept，候选倍数 4 只减少 1 个截断 case，语义权重 0.6/0.8 没有改变当前固定集结果。因此本阶段不改生产参数，下一阶段应结合独立验证集分析。详见 [真实 Embedding 检索校准](RETRIEVAL_CALIBRATION.md)。
+
+分组 CLI 已修复：指定 `--group retrieval` 时只检查 Retrieval 直接门槛和无条件安全门槛，未运行分组在 JSON/Markdown 中标记为 `skipped`；不指定分组时仍执行全部全局门槛。
+
 ## 已知局限
 
 - 固定 Mock 只能测后端结构与确定性护栏，不能评价真实 LLM 的语义评分质量。
@@ -120,7 +130,7 @@ Evaluation 和 Resume 采用三层防护：Prompt 明确声明输入为不受信
 
 ## 下一阶段优先级
 
-1. 使用隔离的合成语料校准真实 BGE/Chroma 候选分布，验证当前 70/30 权重能否泛化；必须人工显式触发，不能读取真实用户数据。
+1. 分析真实校准中的阈值 false reject、空结果 false accept 和 5 个候选截断 case，使用独立验证集评估后再决定是否调参。
 2. 扩充编码混淆、同形字符、跨字段拼接和多语言 Prompt Injection 红队集。
 3. 增加安全事件的结构化持久化统计，保持不记录攻击原文和用户资料。
 4. 扩充冲突、夸大职责和中文数字表达的数据集，避免只覆盖阿拉伯数字。

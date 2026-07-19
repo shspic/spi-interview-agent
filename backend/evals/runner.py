@@ -4,7 +4,12 @@ from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
 
-from evals.config import BASELINE_THRESHOLDS
+from evals.config import (
+    BASELINE_METRIC_GROUPS,
+    BASELINE_THRESHOLDS,
+    GROUPS,
+    UNCONDITIONAL_BASELINE_METRICS,
+)
 from evals.loaders import load_cases
 from evals.metrics import accuracy, mean, percentile
 from evals.reporters import create_result_dir, write_reports
@@ -166,9 +171,18 @@ def _aggregate_metrics(results: list[CaseResult]) -> dict[str, float | int]:
     }
 
 
-def _baseline_checks(metrics: dict[str, float | int]) -> list[BaselineCheck]:
+def _baseline_checks(
+    metrics: dict[str, float | int],
+    selected_groups: set[str] | None,
+) -> list[BaselineCheck]:
     checks = []
     for name, (operator, threshold) in BASELINE_THRESHOLDS.items():
+        if (
+            selected_groups is not None
+            and name not in UNCONDITIONAL_BASELINE_METRICS
+            and not (BASELINE_METRIC_GROUPS.get(name, set()) & selected_groups)
+        ):
+            continue
         actual = metrics.get(name)
         if actual is None:
             checks.append(
@@ -196,12 +210,35 @@ def _baseline_checks(metrics: dict[str, float | int]) -> list[BaselineCheck]:
     return checks
 
 
-def _group_results(results: list[CaseResult]) -> list[GroupResult]:
+def _group_results(
+    results: list[CaseResult],
+    selected_groups: set[str] | None,
+) -> list[GroupResult]:
     grouped = defaultdict(list)
     for result in results:
         grouped[result.group].append(result)
     output = []
-    for group, items in sorted(grouped.items()):
+    included_groups = set(GROUPS) if selected_groups is not None else set(grouped)
+    for group in sorted(included_groups):
+        items = grouped.get(group, [])
+        if not items:
+            output.append(
+                GroupResult(
+                    group=group,
+                    status="skipped",
+                    total=0,
+                    passed=0,
+                    failed=0,
+                    skipped=0,
+                    success_rate=0.0,
+                    p50_ms=0.0,
+                    p95_ms=0.0,
+                    max_ms=0.0,
+                    metrics={},
+                    failed_case_ids=[],
+                )
+            )
+            continue
         durations = [item.duration_ms for item in items]
         passed = sum(item.status == "passed" for item in items)
         failed = sum(item.status == "failed" for item in items)
@@ -224,6 +261,7 @@ def _group_results(results: list[CaseResult]) -> list[GroupResult]:
         output.append(
             GroupResult(
                 group=group,
+                status="failed" if failed else "passed",
                 total=len(items),
                 passed=passed,
                 failed=failed,
@@ -281,7 +319,7 @@ def run_evaluations(
     finished = datetime.now().astimezone()
     aggregate = _aggregate_metrics(results)
     aggregate["uncaught_exception_count"] = uncaught
-    checks = _baseline_checks(aggregate)
+    checks = _baseline_checks(aggregate, groups)
     run_id = started.strftime("%Y-%m-%dT%H%M%S-%f")
     summary = RunSummary(
         run_id=run_id,
@@ -299,7 +337,7 @@ def run_evaluations(
             int(item.metrics.get("retried") is True) for item in results
         ),
         overall_metrics=aggregate,
-        groups=_group_results(results),
+        groups=_group_results(results, groups),
         baseline_checks=checks,
         baseline_passed=all(item.passed for item in checks),
         limitations=[

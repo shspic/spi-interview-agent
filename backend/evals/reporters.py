@@ -59,6 +59,7 @@ def render_markdown(summary: RunSummary, cases: list[CaseResult]) -> str:
         f"- 运行 ID：`{summary.run_id}`",
         f"- Git Commit：`{summary.git_commit}`",
         f"- 模式：`{summary.mode}`",
+        f"- 已选择分组：{', '.join(summary.selected_groups)}",
         f"- Case：{summary.total}（通过 {summary.passed} / 失败 {summary.failed} / 跳过 {summary.skipped}）",
         f"- 基线门槛：{'通过' if summary.baseline_passed else '未通过'}",
         "",
@@ -66,12 +67,12 @@ def render_markdown(summary: RunSummary, cases: list[CaseResult]) -> str:
         "",
         "## 分组结果",
         "",
-        "| 分组 | 通过/总数 | 成功率 | P50(ms) | P95(ms) | 最大(ms) |",
-        "| --- | ---: | ---: | ---: | ---: | ---: |",
+        "| 分组 | 状态 | 通过/总数 | 成功率 | P50(ms) | P95(ms) | 最大(ms) |",
+        "| --- | --- | ---: | ---: | ---: | ---: | ---: |",
     ]
     for group in summary.groups:
         lines.append(
-            f"| {group.group} | {group.passed}/{group.total} | "
+            f"| {group.group} | {group.status} | {group.passed}/{group.total} | "
             f"{group.success_rate:.1%} | {group.p50_ms:.3f} | "
             f"{group.p95_ms:.3f} | {group.max_ms:.3f} |"
         )
