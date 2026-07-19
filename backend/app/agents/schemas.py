@@ -7,11 +7,33 @@ class AgentSchema(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class TrainingGuidanceTask(AgentSchema):
+    title: str
+    category: Literal[
+        "technical",
+        "project_evidence",
+        "answer_depth",
+        "expression",
+        "job_match",
+        "resume",
+    ]
+    completion_criteria: str
+
+
+class TrainingGuidance(AgentSchema):
+    next_round_strategy: str | None = None
+    pending_tasks: list[TrainingGuidanceTask] = Field(
+        default_factory=list,
+        max_length=20,
+    )
+
+
 class InterviewPlanInput(AgentSchema):
     title: str
     mode: Literal["quick", "standard", "deep_dive"]
     planned_main_questions: int = Field(gt=0, le=10)
     target_job_title: str | None = None
+    training_guidance: TrainingGuidance | None = None
 
 
 class InterviewPlanOutput(AgentSchema):
@@ -139,3 +161,70 @@ class EvaluationOutput(AgentSchema):
     evidence_source_ids: list[str] = Field(default_factory=list, max_length=50)
     unsupported_claims: list[str] = Field(default_factory=list, max_length=20)
     strengths: list[str] = Field(default_factory=list, max_length=20)
+
+
+ImprovementCategory = Literal[
+    "technical",
+    "project_evidence",
+    "answer_depth",
+    "expression",
+    "job_match",
+    "resume",
+]
+ImprovementPriority = Literal["low", "medium", "high"]
+
+
+class ImprovementTurnInput(AgentSchema):
+    turn_id: int = Field(gt=0)
+    question: str
+    technical_accuracy_score: int = Field(ge=0, le=100)
+    evidence_consistency_score: int = Field(ge=0, le=100)
+    answer_depth_score: int = Field(ge=0, le=100)
+    expression_structure_score: int = Field(ge=0, le=100)
+    job_match_score: int = Field(ge=0, le=100)
+    total_score: int = Field(ge=0, le=100)
+    problems: list[EvaluationProblem] = Field(default_factory=list, max_length=20)
+    strengths: list[str] = Field(default_factory=list, max_length=20)
+    unsupported_claims: list[str] = Field(default_factory=list, max_length=20)
+    evidence_conflicts: list[EvaluationConflict] = Field(
+        default_factory=list,
+        max_length=20,
+    )
+    evaluation_summary: str
+
+
+class ExistingImprovementTaskInput(AgentSchema):
+    title: str
+    category: ImprovementCategory
+    source_turn_id: int | None = None
+    status: Literal["pending", "completed"]
+
+
+class ImprovementInput(AgentSchema):
+    mode: Literal["quick", "standard", "deep_dive"]
+    target_job_title: str | None = None
+    target_company_name: str | None = None
+    overall_score: float | None = Field(default=None, ge=0, le=100)
+    dimension_scores: dict[str, float] | None = None
+    turns: list[ImprovementTurnInput] = Field(min_length=1, max_length=50)
+    existing_tasks: list[ExistingImprovementTaskInput] = Field(
+        default_factory=list,
+        max_length=50,
+    )
+
+
+class ImprovementTaskProposal(AgentSchema):
+    title: str = Field(min_length=1, max_length=200)
+    description: str = Field(min_length=1, max_length=3000)
+    category: ImprovementCategory
+    priority: ImprovementPriority
+    source_turn_id: int | None = Field(default=None, gt=0)
+    completion_criteria: str = Field(min_length=1, max_length=2000)
+
+
+class ImprovementOutput(AgentSchema):
+    overall_diagnosis: str = Field(min_length=1, max_length=5000)
+    strongest_dimensions: list[str] = Field(default_factory=list, max_length=5)
+    weakest_dimensions: list[str] = Field(default_factory=list, max_length=5)
+    next_round_strategy: str = Field(min_length=1, max_length=5000)
+    tasks: list[ImprovementTaskProposal] = Field(min_length=3, max_length=8)

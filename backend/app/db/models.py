@@ -181,6 +181,10 @@ class InterviewSession(Base):
             "overall_score IS NULL OR (overall_score >= 0 AND overall_score <= 100)",
             name="ck_interview_sessions_overall_score",
         ),
+        CheckConstraint(
+            "improvement_status IN ('pending', 'generating', 'completed', 'failed')",
+            name="ck_interview_sessions_improvement_status",
+        ),
         Index("ix_interview_sessions_user_status", "user_id", "status"),
         Index("ix_interview_sessions_user_mode", "user_id", "mode"),
         Index("ix_interview_sessions_user_created", "user_id", "created_at"),
@@ -216,6 +220,17 @@ class InterviewSession(Base):
     overall_score = Column(Float, nullable=True)
     dimension_scores = Column(JSON, nullable=True)
     summary = Column(Text, nullable=True)
+    improvement_status = Column(
+        Text,
+        nullable=False,
+        default="pending",
+        server_default="pending",
+        index=True,
+    )
+    improvement_summary = Column(Text, nullable=True)
+    next_round_strategy = Column(Text, nullable=True)
+    improvement_generated_at = Column(Text, nullable=True)
+    improvement_error = Column(Text, nullable=True)
     started_at = Column(Text, nullable=True)
     completed_at = Column(Text, nullable=True)
     created_at = Column(Text, nullable=False, index=True)
@@ -382,6 +397,13 @@ class ImprovementTask(Base):
         Index("ix_improvement_tasks_user_category", "user_id", "category"),
         Index("ix_improvement_tasks_session_status", "session_id", "status"),
         Index("ix_improvement_tasks_user_created", "user_id", "created_at"),
+        Index(
+            "ux_improvement_tasks_session_dedupe",
+            "session_id",
+            "dedupe_key",
+            unique=True,
+            sqlite_where=text("dedupe_key IS NOT NULL"),
+        ),
     )
 
     id = Column(Integer, primary_key=True, index=True)
@@ -405,9 +427,11 @@ class ImprovementTask(Base):
     )
     title = Column(Text, nullable=False)
     description = Column(Text, nullable=False)
+    completion_criteria = Column(Text, nullable=False, default="", server_default="")
     category = Column(Text, nullable=False, index=True)
     priority = Column(Text, nullable=False)
     status = Column(Text, nullable=False, default="pending", index=True)
+    dedupe_key = Column(Text, nullable=True)
     created_at = Column(Text, nullable=False, index=True)
     completed_at = Column(Text, nullable=True)
     updated_at = Column(Text, nullable=False)
@@ -420,7 +444,8 @@ class AgentRun(Base):
     __tablename__ = "agent_runs"
     __table_args__ = (
         CheckConstraint(
-            "agent_name IN ('supervisor', 'evidence', 'evaluation', 'interviewer')",
+            "agent_name IN ('supervisor', 'evidence', 'evaluation', "
+            "'interviewer', 'improvement')",
             name="ck_agent_runs_agent_name",
         ),
         CheckConstraint(

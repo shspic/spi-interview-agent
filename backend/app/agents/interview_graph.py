@@ -20,6 +20,7 @@ from app.agents.schemas import (
     SupervisorDecisionInput,
     SupervisorDecisionOutput,
     SupervisorEvaluationSummary,
+    TrainingGuidance,
 )
 from app.agents.supervisor_agent import SupervisorAgent
 from app.db.models import AgentRun
@@ -33,6 +34,7 @@ class InterviewGraphState(TypedDict, total=False):
     mode: Literal["quick", "standard", "deep_dive"]
     planned_main_questions: int
     target_job_title: str | None
+    training_guidance: TrainingGuidance | None
     session_id: int
     user_id: int
     plan: InterviewPlanOutput
@@ -151,6 +153,7 @@ def build_interview_graph(runtime: InterviewAgentRuntime):
             mode=state["mode"],
             planned_main_questions=state["planned_main_questions"],
             target_job_title=state.get("target_job_title"),
+            training_guidance=state.get("training_guidance"),
         )
         plan = runtime.execute(
             runtime.supervisor,

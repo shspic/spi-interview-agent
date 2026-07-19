@@ -46,6 +46,7 @@ def create_improvement_task(
     category: str,
     priority: str,
     turn_id: int | None = None,
+    completion_criteria: str = "",
 ) -> ImprovementTask:
     get_owned_session(db, user_id, session_id)
     if category not in ALLOWED_CATEGORIES:
@@ -74,6 +75,7 @@ def create_improvement_task(
         turn_id=turn_id,
         title=title.strip(),
         description=description.strip(),
+        completion_criteria=completion_criteria.strip(),
         category=category,
         priority=priority,
         status="pending",
@@ -92,6 +94,7 @@ def list_improvement_tasks(
     *,
     status: str | None = None,
     category: str | None = None,
+    priority: str | None = None,
     session_id: int | None = None,
 ) -> list[ImprovementTask]:
     query = db.query(ImprovementTask).filter(ImprovementTask.user_id == user_id)
@@ -99,6 +102,8 @@ def list_improvement_tasks(
         query = query.filter(ImprovementTask.status == status)
     if category is not None:
         query = query.filter(ImprovementTask.category == category)
+    if priority is not None:
+        query = query.filter(ImprovementTask.priority == priority)
     if session_id is not None:
         query = query.filter(ImprovementTask.session_id == session_id)
     return query.order_by(ImprovementTask.id.desc()).all()

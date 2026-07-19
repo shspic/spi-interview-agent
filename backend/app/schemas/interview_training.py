@@ -16,6 +16,12 @@ ImprovementCategory = Literal[
 ]
 ImprovementPriority = Literal["low", "medium", "high"]
 ImprovementStatus = Literal["pending", "completed"]
+ImprovementGenerationStatus = Literal[
+    "pending",
+    "generating",
+    "completed",
+    "failed",
+]
 
 
 class InterviewSessionCreate(BaseModel):
@@ -156,18 +162,28 @@ class InterviewTurnResponse(BaseModel):
     updated_at: str
 
 
+class ImprovementTaskSourceTurnSummary(BaseModel):
+    id: int
+    sequence_number: int
+    main_question_number: int
+    follow_up_number: int
+    question: str
+
+
 class ImprovementTaskResponse(BaseModel):
     id: int
     session_id: int
     turn_id: int | None
     title: str
     description: str
+    completion_criteria: str
     category: ImprovementCategory
     priority: ImprovementPriority
     status: ImprovementStatus
     created_at: str
     completed_at: str | None
     updated_at: str
+    source_turn: ImprovementTaskSourceTurnSummary | None
 
 
 class InterviewSessionResponse(BaseModel):
@@ -181,6 +197,10 @@ class InterviewSessionResponse(BaseModel):
     overall_score: float | None
     dimension_scores: dict[str, float] | None
     summary: str | None
+    improvement_status: ImprovementGenerationStatus
+    improvement_summary: str | None
+    next_round_strategy: str | None
+    improvement_generated_at: str | None
     started_at: str | None
     completed_at: str | None
     created_at: str
@@ -198,6 +218,7 @@ class InterviewSessionDetail(InterviewSessionResponse):
     completed_main_questions: int
     current_follow_up_count: int
     is_completed: bool
+    comparison_available: bool
     agent_execution_summary: dict[str, Any] | None
 
 
@@ -228,3 +249,41 @@ class InterviewSessionListResponse(BaseModel):
 
 class ImprovementTaskListResponse(BaseModel):
     tasks: list[ImprovementTaskResponse]
+
+
+class ImprovementGenerationResponse(BaseModel):
+    session_id: int
+    improvement_status: ImprovementGenerationStatus
+    improvement_summary: str | None
+    next_round_strategy: str | None
+    improvement_generated_at: str | None
+    generated: bool
+    tasks: list[ImprovementTaskResponse]
+
+
+class InterviewRetryResponse(InterviewSessionResponse):
+    source_session_id: int
+    previous_task_count: int
+    completed_task_count: int
+    pending_task_count: int
+    task_completion_rate: float
+
+
+class InterviewComparisonResponse(BaseModel):
+    comparable: bool
+    reason: str | None
+    note: str
+    previous_session_id: int | None
+    current_session_id: int
+    previous_overall_score: float | None
+    current_overall_score: float | None
+    overall_delta: float | None
+    previous_dimension_scores: dict[str, float] | None
+    current_dimension_scores: dict[str, float] | None
+    dimension_deltas: dict[str, float] | None
+    improved_dimensions: list[str]
+    regressed_dimensions: list[str]
+    unchanged_dimensions: list[str]
+    previous_task_count: int
+    completed_task_count: int
+    task_completion_rate: float

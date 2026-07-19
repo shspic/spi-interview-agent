@@ -14,15 +14,19 @@ from app.db.models import (
 from app.schemas.interview_training import (
     InterviewAnswerRequest,
     InterviewAnswerResponse,
+    InterviewComparisonResponse,
     InterviewMode,
     InterviewSessionCreate,
     InterviewSessionDetail,
     InterviewSessionListResponse,
     InterviewSessionResponse,
+    InterviewRetryResponse,
     InterviewStartResponse,
     InterviewSessionUpdate,
     InterviewStatus,
     ImprovementTaskResponse,
+    ImprovementTaskSourceTurnSummary,
+    ImprovementGenerationResponse,
     InterviewTurnResponse,
     PreviousSessionSummary,
     ProjectFileSummary,
@@ -32,6 +36,15 @@ from app.services.interview_flow_service import (
     InterviewFlowError,
     answer_interview_turn,
     start_interview_flow,
+)
+from app.services.improvement_generation_service import (
+    ImprovementGenerationError,
+    generate_improvements_for_session,
+)
+from app.services.interview_retry_service import (
+    compare_retry_session,
+    comparison_available,
+    create_retry_session,
 )
 from app.services.interview_session_service import (
     InterviewTrainingServiceError,
@@ -51,18 +64,33 @@ def raise_http_error(error: InterviewTrainingServiceError) -> None:
 
 
 def task_to_response(task: ImprovementTask) -> ImprovementTaskResponse:
+    source_turn = None
+    if (
+        task.turn is not None
+        and task.turn.user_id == task.user_id
+        and task.turn.session_id == task.session_id
+    ):
+        source_turn = ImprovementTaskSourceTurnSummary(
+            id=task.turn.id,
+            sequence_number=task.turn.sequence_number,
+            main_question_number=task.turn.main_question_number,
+            follow_up_number=task.turn.follow_up_number,
+            question=task.turn.question,
+        )
     return ImprovementTaskResponse(
         id=task.id,
         session_id=task.session_id,
         turn_id=task.turn_id,
         title=task.title,
         description=task.description,
+        completion_criteria=task.completion_criteria,
         category=task.category,
         priority=task.priority,
         status=task.status,
         created_at=task.created_at,
         completed_at=task.completed_at,
         updated_at=task.updated_at,
+        source_turn=source_turn,
     )
 
 
@@ -176,6 +204,10 @@ def session_to_response(
         overall_score=interview_session.overall_score,
         dimension_scores=interview_session.dimension_scores,
         summary=interview_session.summary,
+        improvement_status=interview_session.improvement_status,
+        improvement_summary=interview_session.improvement_summary,
+        next_round_strategy=interview_session.next_round_strategy,
+        improvement_generated_at=interview_session.improvement_generated_at,
         started_at=interview_session.started_at,
         completed_at=interview_session.completed_at,
         created_at=interview_session.created_at,
@@ -224,6 +256,11 @@ def session_to_detail(
         completed_main_questions=progress["completed_main_questions"],
         current_follow_up_count=progress["current_follow_up_count"],
         is_completed=interview_session.status == "completed",
+        comparison_available=comparison_available(
+            db,
+            user_id,
+            interview_session,
+        ),
         agent_execution_summary=interview_session.agent_execution_summary,
     )
 
@@ -472,3 +509,76 @@ def cancel_session(
     except InterviewTrainingServiceError as error:
         raise_http_error(error)
     return session_to_response(db, current_user.id, interview_session)
+
+
+@router.post(
+    "/interview-sessions/{session_id}/improvements/retry",
+    response_model=ImprovementGenerationResponse,
+)
+def retry_improvement_generation(
+    session_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    try:
+        result = generate_improvements_for_session(
+            db,
+            current_user.id,
+            session_id,
+        )
+    except ImprovementGenerationError as error:
+        raise HTTPException(
+            status_code=error.status_code,
+            detail=error.detail,
+        ) from error
+    return ImprovementGenerationResponse(
+        session_id=result.interview_session.id,
+        improvement_status=result.interview_session.improvement_status,
+        improvement_summary=result.interview_session.improvement_summary,
+        next_round_strategy=result.interview_session.next_round_strategy,
+        improvement_generated_at=(
+            result.interview_session.improvement_generated_at
+        ),
+        generated=result.generated,
+        tasks=[task_to_response(task) for task in result.tasks],
+    )
+
+
+@router.post(
+    "/interview-sessions/{session_id}/retry",
+    response_model=InterviewRetryResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def retry_interview_session(
+    session_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    try:
+        result = create_retry_session(db, current_user.id, session_id)
+    except InterviewTrainingServiceError as error:
+        raise_http_error(error)
+    base = session_to_response(db, current_user.id, result.interview_session)
+    return InterviewRetryResponse(
+        **base.model_dump(),
+        source_session_id=result.source_session_id,
+        previous_task_count=result.previous_task_count,
+        completed_task_count=result.completed_task_count,
+        pending_task_count=result.pending_task_count,
+        task_completion_rate=result.task_completion_rate,
+    )
+
+
+@router.get(
+    "/interview-sessions/{session_id}/comparison",
+    response_model=InterviewComparisonResponse,
+)
+def get_interview_comparison(
+    session_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    try:
+        return compare_retry_session(db, current_user.id, session_id)
+    except InterviewTrainingServiceError as error:
+        raise_http_error(error)

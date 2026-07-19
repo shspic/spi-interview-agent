@@ -46,7 +46,8 @@ def init_db():
     ensure_target_job_active_index()
     ensure_interview_session_agent_columns()
     ensure_interview_turn_evaluation_columns()
-    ensure_agent_run_supports_evaluation()
+    ensure_interview_improvement_columns()
+    ensure_agent_run_supports_improvement()
 
 
 def get_db():
@@ -170,7 +171,62 @@ def ensure_interview_turn_evaluation_columns():
                 )
 
 
-def ensure_agent_run_supports_evaluation():
+def ensure_interview_improvement_columns():
+    inspector = inspect(engine)
+    session_columns = {
+        column["name"] for column in inspector.get_columns("interview_sessions")
+    }
+    task_columns = {
+        column["name"] for column in inspector.get_columns("improvement_tasks")
+    }
+
+    session_new_columns = {
+        "improvement_status": "TEXT NOT NULL DEFAULT 'pending'",
+        "improvement_summary": "TEXT",
+        "next_round_strategy": "TEXT",
+        "improvement_generated_at": "TEXT",
+        "improvement_error": "TEXT",
+    }
+    task_new_columns = {
+        "completion_criteria": "TEXT NOT NULL DEFAULT ''",
+        "dedupe_key": "TEXT",
+    }
+
+    with engine.begin() as connection:
+        for column_name, column_type in session_new_columns.items():
+            if column_name not in session_columns:
+                connection.execute(
+                    text(
+                        "ALTER TABLE interview_sessions "
+                        f"ADD COLUMN {column_name} {column_type}"
+                    )
+                )
+        for column_name, column_type in task_new_columns.items():
+            if column_name not in task_columns:
+                connection.execute(
+                    text(
+                        "ALTER TABLE improvement_tasks "
+                        f"ADD COLUMN {column_name} {column_type}"
+                    )
+                )
+        connection.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS "
+                "ix_interview_sessions_improvement_status "
+                "ON interview_sessions (improvement_status)"
+            )
+        )
+        connection.execute(
+            text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS "
+                "ux_improvement_tasks_session_dedupe "
+                "ON improvement_tasks (session_id, dedupe_key) "
+                "WHERE dedupe_key IS NOT NULL"
+            )
+        )
+
+
+def ensure_agent_run_supports_improvement():
     with engine.connect() as connection:
         table_sql = connection.execute(
             text(
@@ -179,7 +235,7 @@ def ensure_agent_run_supports_evaluation():
             )
         ).scalar_one_or_none()
 
-    if table_sql is None or "'evaluation'" in table_sql:
+    if table_sql is None or "'improvement'" in table_sql:
         return
 
     with engine.begin() as connection:
@@ -192,7 +248,8 @@ def ensure_agent_run_supports_evaluation():
                 "ON DELETE CASCADE, "
                 "user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, "
                 "agent_name TEXT NOT NULL CHECK (agent_name IN "
-                "('supervisor', 'evidence', 'evaluation', 'interviewer')), "
+                "('supervisor', 'evidence', 'evaluation', 'interviewer', "
+                "'improvement')), "
                 "prompt_version TEXT NOT NULL, "
                 "status TEXT NOT NULL CHECK (status IN ('success', 'error')), "
                 "latency_ms INTEGER NOT NULL CHECK (latency_ms >= 0), "

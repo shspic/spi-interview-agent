@@ -12,8 +12,14 @@ from app.agents.schemas import (
     EvaluationOutput,
     InterviewPlanOutput,
     SupervisorDecisionOutput,
+    TrainingGuidance,
+    TrainingGuidanceTask,
 )
-from app.db.models import InterviewSession, InterviewTurn, TargetJob
+from app.db.models import ImprovementTask, InterviewSession, InterviewTurn, TargetJob
+from app.services.improvement_generation_service import (
+    ImprovementGenerationError,
+    generate_improvements_for_session,
+)
 from app.services.interview_session_service import (
     InterviewTrainingServiceError,
     create_interview_turn,
@@ -65,6 +71,50 @@ def _target_job_title(
         query = query.filter(TargetJob.is_active.is_(True))
     job = query.first()
     return job.job_title if job is not None else None
+
+
+def _training_guidance(
+    db: Session,
+    user_id: int,
+    interview_session: InterviewSession,
+) -> TrainingGuidance | None:
+    if interview_session.previous_session_id is None:
+        return None
+    previous_session = (
+        db.query(InterviewSession)
+        .filter(
+            InterviewSession.id == interview_session.previous_session_id,
+            InterviewSession.user_id == user_id,
+            InterviewSession.status == "completed",
+        )
+        .first()
+    )
+    if previous_session is None:
+        return None
+    pending_tasks = (
+        db.query(ImprovementTask)
+        .filter(
+            ImprovementTask.session_id == previous_session.id,
+            ImprovementTask.user_id == user_id,
+            ImprovementTask.status == "pending",
+        )
+        .order_by(ImprovementTask.id.asc())
+        .limit(20)
+        .all()
+    )
+    if not previous_session.next_round_strategy and not pending_tasks:
+        return None
+    return TrainingGuidance(
+        next_round_strategy=previous_session.next_round_strategy,
+        pending_tasks=[
+            TrainingGuidanceTask(
+                title=task.title,
+                category=task.category,
+                completion_criteria=task.completion_criteria,
+            )
+            for task in pending_tasks
+        ],
+    )
 
 
 def _store_failed_summary(
@@ -131,6 +181,11 @@ def start_interview_flow(
         "mode": interview_session.mode,
         "planned_main_questions": interview_session.planned_main_questions,
         "target_job_title": _target_job_title(
+            db,
+            user_id,
+            interview_session,
+        ),
+        "training_guidance": _training_guidance(
             db,
             user_id,
             interview_session,
@@ -349,6 +404,15 @@ def answer_interview_turn(
         interview_session.updated_at = interview_session.completed_at
         summarize_completed_session(db, interview_session)
         db.commit()
+        try:
+            generation_result = generate_improvements_for_session(
+                db,
+                user_id,
+                session_id,
+            )
+            interview_session = generation_result.interview_session
+        except ImprovementGenerationError:
+            interview_session = get_owned_session(db, user_id, session_id)
         db.refresh(current_turn)
         return InterviewAnswerResult(
             interview_session=interview_session,

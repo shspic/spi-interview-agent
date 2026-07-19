@@ -7,6 +7,7 @@ from app.db.database import get_db
 from app.db.models import User
 from app.schemas.interview_training import (
     ImprovementCategory,
+    ImprovementPriority,
     ImprovementStatus,
     ImprovementTaskListResponse,
     ImprovementTaskResponse,
@@ -25,6 +26,7 @@ router = APIRouter()
 def get_improvement_tasks(
     task_status: ImprovementStatus | None = Query(default=None, alias="status"),
     category: ImprovementCategory | None = None,
+    priority: ImprovementPriority | None = None,
     session_id: int | None = Query(default=None, gt=0),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -34,6 +36,7 @@ def get_improvement_tasks(
         current_user.id,
         status=task_status,
         category=category,
+        priority=priority,
         session_id=session_id,
     )
     return {"tasks": [task_to_response(task) for task in tasks]}

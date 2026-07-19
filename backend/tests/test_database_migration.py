@@ -167,6 +167,13 @@ def test_training_tables_are_added_without_changing_existing_user(
     }
     assert "interview_plan" in session_columns
     assert "agent_execution_summary" in session_columns
+    assert {
+        "improvement_status",
+        "improvement_summary",
+        "next_round_strategy",
+        "improvement_generated_at",
+        "improvement_error",
+    }.issubset(session_columns)
     turn_columns = {
         column["name"] for column in inspector.get_columns("interview_turns")
     }
@@ -181,8 +188,13 @@ def test_training_tables_are_added_without_changing_existing_user(
     task_indexes = {
         index["name"] for index in inspector.get_indexes("improvement_tasks")
     }
+    task_columns = {
+        column["name"] for column in inspector.get_columns("improvement_tasks")
+    }
     assert "ix_interview_sessions_user_status" in session_indexes
     assert "ix_improvement_tasks_user_status" in task_indexes
+    assert "ux_improvement_tasks_session_dedupe" in task_indexes
+    assert {"completion_criteria", "dedupe_key"}.issubset(task_columns)
 
     with legacy_engine.connect() as connection:
         existing_user = connection.execute(
@@ -202,6 +214,13 @@ def test_training_tables_are_added_without_changing_existing_user(
                 "INSERT INTO agent_runs VALUES "
                 "(2, 'evaluation-run', 1, 1, 'evaluation', 'v2', "
                 "'success', 12, NULL, '2026-07-18T00:00:01')"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO agent_runs VALUES "
+                "(3, 'improvement-run', 1, 1, 'improvement', 'v3', "
+                "'success', 13, NULL, '2026-07-18T00:00:02')"
             )
         )
 
