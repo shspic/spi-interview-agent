@@ -1,0 +1,10 @@
+[
+  {"id":"supervisor_next_on_sufficient","group":"supervisor","description":"回答充分进入下一主问题","input":{"response":{"action":"next_main_question","reason":"回答充分"}},"expected":{"action":"next_main_question"}},
+  {"id":"supervisor_follow_short","group":"supervisor","description":"回答过短进行追问","input":{"response":{"action":"follow_up","reason":"回答过短"},"payload":{"answer":"负责接口","evaluation":{"technical_accuracy_score":70,"evidence_consistency_score":70,"answer_depth_score":30,"has_evidence_conflict":false,"evaluation_summary":"过短"}}},"expected":{"action":"follow_up"}},
+  {"id":"supervisor_follow_technical","group":"supervisor","description":"缺少技术细节进行追问","input":{"response":{"action":"follow_up","reason":"缺少技术细节"}},"expected":{"action":"follow_up"}},
+  {"id":"supervisor_follow_responsibility","group":"supervisor","description":"个人职责不清进行追问","input":{"response":{"action":"follow_up","reason":"职责不清"}},"expected":{"action":"follow_up"}},
+  {"id":"supervisor_follow_conflict","group":"supervisor","description":"资料冲突优先追问","input":{"response":{"action":"follow_up","reason":"存在冲突"},"payload":{"evaluation":{"technical_accuracy_score":70,"evidence_consistency_score":30,"answer_depth_score":60,"has_evidence_conflict":true,"evaluation_summary":"资料冲突"}}},"expected":{"action":"follow_up"}},
+  {"id":"supervisor_follow_up_cap","group":"supervisor","description":"两次追问上限强制进入下一题","input":{"response":{"action":"follow_up","reason":"继续追问"},"payload":{"current_follow_up_count":2}},"expected":{"action":"next_main_question"}},
+  {"id":"supervisor_complete_plan","group":"supervisor","description":"完成计划题数后结束","input":{"response":{"action":"next_main_question","reason":"下一题"},"payload":{"current_main_question":3}},"expected":{"action":"complete"}},
+  {"id":"supervisor_prevent_early_complete","group":"supervisor","description":"计划未完成时阻止过早结束","input":{"response":{"action":"complete","reason":"结束"},"payload":{"current_main_question":2}},"expected":{"action":"next_main_question"}}
+]

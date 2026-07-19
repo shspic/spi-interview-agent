@@ -1,0 +1,8 @@
+[
+  {"id":"reliability_structured_retry","group":"reliability","description":"首次非法 JSON 后第二次结构成功","input":{"operation":"structured_output","responses":["invalid",{"value":7}]},"expected":{"controlled_failure":false,"value":7}},
+  {"id":"reliability_structured_failure","group":"reliability","description":"两次非法 JSON 返回受控失败","input":{"operation":"structured_output","responses":["invalid","invalid"]},"expected":{"controlled_failure":true}},
+  {"id":"reliability_score_weight","group":"reliability","description":"五维总分严格按 30/25/20/15/10 计算","input":{"operation":"score_weight","evaluation":{"technical_accuracy_score":80,"evidence_consistency_score":80,"answer_depth_score":70,"expression_structure_score":90,"job_match_score":60,"evaluation_summary":"固定评分","problems":[],"optimized_answer":"固定回答","modification_reason":"固定原因","has_evidence_conflict":false,"evidence_conflicts":[],"evidence_source_ids":[],"unsupported_claims":[],"strengths":[]}},"expected":{"total_score":78}},
+  {"id":"reliability_distance_below_threshold","group":"reliability","description":"阈值内项目证据可用","input":{"operation":"distance_threshold","evidence_case":{"mode":"quick","chunks":[{"content":"FastAPI 项目","metadata":{"file_id":"project-a","chunk_index":0,"category":"project"},"distance":0.79}]}},"expected":{"is_sufficient":true}},
+  {"id":"reliability_usage_idempotency","group":"reliability","description":"相同幂等键只产生一条用量和一次扣费","input":{"operation":"usage_idempotency"},"expected":{"duplicate_charge_count":0}},
+  {"id":"reliability_cascade_delete","group":"reliability","description":"删除会话不遗留 Turn 或 ImprovementTask","input":{"operation":"cascade_delete"},"expected":{"orphan_record_count":0}}
+]

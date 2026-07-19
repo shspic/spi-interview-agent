@@ -1,0 +1,8 @@
+[
+  {"id":"improvement_valid","group":"improvement","description":"生成 3 个合法且覆盖低分维度的任务","input":{"scenario":"valid"},"expected":{"controlled_failure":false}},
+  {"id":"improvement_invalid_category","group":"improvement","description":"非法 category 触发结构重试并最终受控失败","input":{"scenario":"invalid_category"},"expected":{"controlled_failure":true}},
+  {"id":"improvement_invalid_priority","group":"improvement","description":"非法 priority 被拒绝","input":{"scenario":"invalid_priority"},"expected":{"controlled_failure":true}},
+  {"id":"improvement_cross_turn","group":"improvement","description":"其他会话 source_turn_id 被拒绝","input":{"scenario":"cross_turn"},"expected":{"controlled_failure":true}},
+  {"id":"improvement_duplicate_task","group":"improvement","description":"同一次输出中的重复任务被拒绝","input":{"scenario":"duplicate"},"expected":{"controlled_failure":true}},
+  {"id":"improvement_invalid_then_valid","group":"improvement","description":"首次非法输出后重试成功且不重复任务","input":{"scenario":"invalid_then_valid"},"expected":{"controlled_failure":false}}
+]

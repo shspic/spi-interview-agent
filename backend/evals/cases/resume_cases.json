@@ -1,0 +1,8 @@
+[
+  {"id":"resume_sufficient","group":"resume","description":"资料充分时生成 3 条精简描述和详细版","input":{"scenario":"valid","sufficient":true},"expected":{"controlled_failure":false}},
+  {"id":"resume_insufficient_warning","group":"resume","description":"资料不足时必须生成 warnings","input":{"scenario":"valid","sufficient":false},"expected":{"controlled_failure":false}},
+  {"id":"resume_fake_source","group":"resume","description":"伪造 evidence_source_id 被拒绝","input":{"scenario":"fake_source","sufficient":true},"expected":{"controlled_failure":true}},
+  {"id":"resume_new_number","group":"resume","description":"无依据百分比进入正式描述时被拒绝","input":{"scenario":"new_number","sufficient":true},"expected":{"controlled_failure":true}},
+  {"id":"resume_new_technology","group":"resume","description":"JD 技术栈不能直接写成项目技术栈","input":{"scenario":"new_technology","sufficient":true},"expected":{"controlled_failure":true}},
+  {"id":"resume_conflict_claim","group":"resume","description":"冲突内容不能进入正式项目描述","input":{"scenario":"conflict_claim","sufficient":true},"expected":{"controlled_failure":true}}
+]

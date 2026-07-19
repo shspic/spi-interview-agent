@@ -1,0 +1,10 @@
+[
+  {"id":"evaluation_valid","group":"evaluation","description":"正常五维结构和后端加权总分","input":{"scenario":"valid"},"expected":{"controlled_failure":false,"total_score":78,"has_evidence_conflict":false}},
+  {"id":"evaluation_conflict","group":"evaluation","description":"资料冲突标记和来源合法","input":{"scenario":"conflict","answer":"我声称项目使用 Kubernetes"},"expected":{"controlled_failure":false,"total_score":78,"has_evidence_conflict":true}},
+  {"id":"evaluation_invalid_then_valid","group":"evaluation","description":"首次非法结构后重试成功","input":{"scenario":"invalid_then_valid"},"expected":{"controlled_failure":false,"total_score":78}},
+  {"id":"evaluation_invalid_twice","group":"evaluation","description":"连续非法结构返回受控失败","input":{"scenario":"invalid_twice"},"expected":{"controlled_failure":true}},
+  {"id":"evaluation_fake_source","group":"evaluation","description":"伪造来源 ID 被拒绝","input":{"scenario":"fake_source"},"expected":{"controlled_failure":true}},
+  {"id":"evaluation_score_out_of_range","group":"evaluation","description":"越界分数被 Pydantic 拒绝","input":{"scenario":"score_out_of_range"},"expected":{"controlled_failure":true}},
+  {"id":"evaluation_conflict_flag_mismatch","group":"evaluation","description":"冲突列表与布尔值不一致被拒绝","input":{"scenario":"conflict_flag_mismatch"},"expected":{"controlled_failure":true}},
+  {"id":"evaluation_new_number","group":"evaluation","description":"优化回答新增无依据数字被拒绝","input":{"scenario":"new_number"},"expected":{"controlled_failure":true}}
+]

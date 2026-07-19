@@ -375,3 +375,17 @@ backend/.env 不应提交到 Git。
 
 ```
 ```
+
+---
+
+## 12. 项目评估
+
+项目提供默认不访问真实网络、模型或用户数据的 Mock 评估基线：
+
+```powershell
+cd D:\spir\NO1_agent\backend
+.venv\Scripts\python.exe -m evals.run_evals
+.venv\Scripts\python.exe -m evals.run_evals --group retrieval
+```
+
+每次运行的 JSON、case 明细和 Markdown 报告位于 `backend/evals/results/<运行时间>/`，详细指标、门槛和首次结果参见 [自动化评估基线](docs/EVALUATION_BASELINE.md)。

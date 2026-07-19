@@ -36,6 +36,10 @@ frontend/dist/
 *.log
 logs/
 
+# Evaluation runtime output
+backend/evals/results/*
+!backend/evals/results/.gitkeep
+
 # IDE
 .vscode/
 .idea/
