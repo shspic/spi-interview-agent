@@ -1,23 +1,51 @@
 from pathlib import Path
+from urllib.parse import unquote, urlsplit
 
 from sqlalchemy import create_engine, event, inspect, text
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 from app.core.config import settings
 
-db_path = Path(settings.sqlite_db_path)
+BACKEND_DIR = Path(__file__).resolve().parents[2]
 
-if not db_path.is_absolute():
-    backend_dir = Path(__file__).resolve().parents[2]
-    db_path = backend_dir / db_path
 
-db_path.parent.mkdir(parents=True, exist_ok=True)
+def build_database_url() -> str:
+    configured_url = settings.database_url.strip()
+    if configured_url:
+        if configured_url.startswith("sqlite:///./"):
+            relative_path = unquote(configured_url.removeprefix("sqlite:///"))
+            absolute_path = (BACKEND_DIR / relative_path).resolve()
+            return f"sqlite:///{absolute_path.as_posix()}"
+        return configured_url
 
-SQLALCHEMY_DATABASE_URL = f"sqlite:///{db_path.as_posix()}"
+    configured_path = Path(settings.sqlite_db_path)
+    if not configured_path.is_absolute():
+        configured_path = BACKEND_DIR / configured_path
+    return f"sqlite:///{configured_path.resolve().as_posix()}"
+
+
+SQLALCHEMY_DATABASE_URL = build_database_url()
+
+
+def _prepare_sqlite_directory(database_url: str) -> None:
+    parsed = urlsplit(database_url)
+    if parsed.scheme != "sqlite" or database_url in {"sqlite://", "sqlite:///:memory:"}:
+        return
+    path = Path(unquote(parsed.path.lstrip("/")))
+    if database_url.startswith("sqlite:////"):
+        path = Path("/") / path
+    if path.drive or path.is_absolute():
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+_prepare_sqlite_directory(SQLALCHEMY_DATABASE_URL)
 
 engine = create_engine(
     SQLALCHEMY_DATABASE_URL,
-    connect_args={"check_same_thread": False},
+    connect_args=(
+        {"check_same_thread": False}
+        if SQLALCHEMY_DATABASE_URL.startswith("sqlite")
+        else {}
+    ),
 )
 
 
@@ -37,6 +65,7 @@ Base = declarative_base()
 
 
 def init_db():
+    """仅供显式旧库兼容和隔离测试使用，不得作为正常启动路径。"""
     from app.db import models
 
     Base.metadata.create_all(bind=engine)

@@ -8,7 +8,8 @@ BACKEND_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND_DIR))
 
 from app.core.security import normalize_username
-from app.db.database import SessionLocal, init_db
+from app.db.database import SessionLocal, engine
+from app.db.schema_version import require_current_schema
 from app.db.models import User
 from app.services.admin_audit_service import add_admin_audit_log
 
@@ -33,7 +34,7 @@ def parse_args():
 
 def main():
     args = parse_args()
-    init_db()
+    require_current_schema(engine)
     db = SessionLocal()
     try:
         username = normalize_username(args.username)

@@ -100,9 +100,9 @@ PDF 在落入最终目录前检查签名，并用当前 `pypdf` 严格打开。�
 
 ## 12. CORS
 
-来源来自 `CORS_ALLOWED_ORIGINS`，不接受 `*`。启用 credentials 时仍只回显明确允许的来源。方法限制为 GET、POST、PUT、PATCH、DELETE、OPTIONS；请求头限制为 Authorization、Content-Type、Idempotency-Key、X-Request-ID。
+来源来自 `CORS_ALLOWED_ORIGINS`，不接受 `*`。启用 credentials 时仍只回显明确允许的来源。方法限制为 GET、POST、PUT、PATCH、DELETE、OPTIONS；请求头限制为 Content-Type、Idempotency-Key、X-CSRF-Token、X-Request-ID，不再允许浏览器 Bearer 注入。
 
-开发环境默认允许两个本地 Vite 来源。生产环境未配置 `CORS_ALLOWED_ORIGINS` 时默认不允许跨域来源。恶意 Origin 不会获得 `Access-Control-Allow-Origin`。
+开发环境统一使用 `http://localhost:5173`。生产环境未配置 `CORS_ALLOWED_ORIGINS` 时默认不允许跨域来源。恶意 Origin 不会获得 `Access-Control-Allow-Origin`。
 
 ## 13. 请求 ID、安全响应头与错误
 
@@ -126,9 +126,9 @@ PDF 在落入最终目录前检查签名，并用当前 `pypdf` 严格打开。�
 
 Agent 与检索已有安全日志继续只记录 ID、计数和拒绝原因枚举，不记录跨用户非法 chunk 原文。
 
-## 15. SQLite 增量兼容与局限
+## 15. SQLite 迁移与局限
 
-仍采用现有 `Base.metadata.create_all + 增量列/索引检查`：新增表由 `create_all` 创建；旧 `files` 增加大小、内容哈希和上传幂等字段；旧 `agent_runs` 增加 request_id；不删除或重建用户业务表，不引入 Alembic。
+当前 Schema 已由 Alembic 接管。应用正常启动不再执行 `Base.metadata.create_all`、手工补列/索引或 `agent_runs` 重建；现有数据库必须先做完整结构核验和 SQLite 备份，再由显式接管命令 stamp。详细流程见 `DATABASE_MIGRATIONS.md`。
 
 SQLite 适合当前单机朋友试用，但写锁会限制高并发，固定窗口不是精确滑动窗口，多进程部署也缺少集中式全局协调。正式生产化前应引入 Alembic、PostgreSQL，并用 Redis/Lua 或等价原子存储实现分布式限流和存储预留；不要简单把当前表计数复制到多个独立数据库。
 

@@ -1,6 +1,7 @@
 # SPI面试Agent
 
 > 浏览器认证已改为 HttpOnly Access/Refresh Cookie、服务端可撤销会话和会话绑定 CSRF，不再把 JWT 保存到 `localStorage`。本地与生产配置见 [认证与会话安全](docs/AUTH_SESSION_SECURITY.md)。
+> 本地首次启动、Secret 初始化和现有 SQLite 接管见 [本地开发安全初始化](docs/LOCAL_DEVELOPMENT_SETUP.md)；Schema 变更由 [Alembic 数据库迁移](docs/DATABASE_MIGRATIONS.md) 管理。
 
 SPI面试Agent 是一个面向 AI 应用开发实习求职场景的智能面试训练与岗位匹配系统。
 
@@ -222,34 +223,28 @@ NO1_agent/
 cd D:\spir\NO1_agent\backend
 ```
 
-激活虚拟环境：
-
-```powershell
-.\.venv\Scripts\activate
-```
-
 安装依赖：
 
 ```powershell
-pip install -r requirements.txt
+.venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
 
 启动后端：
 
 ```powershell
-uvicorn app.main:app --reload --no-server-header
+powershell -ExecutionPolicy Bypass -File .\scripts\start_backend_dev.ps1
 ```
 
 后端地址：
 
 ```text
-http://127.0.0.1:8000
+http://localhost:8000
 ```
 
 Swagger 文档：
 
 ```text
-http://127.0.0.1:8000/docs
+http://localhost:8000/docs
 ```
 
 ---
@@ -284,32 +279,13 @@ http://localhost:5173
 
 ## 7. 环境变量
 
-后端需要创建：
+后端本地配置由安全初始化工具创建或补齐：
 
 ```text
-backend/.env
+.venv\Scripts\python.exe -m scripts.bootstrap_local_env
 ```
 
-参考：
-
-```env
-DEEPSEEK_API_KEY=your_deepseek_api_key
-DEEPSEEK_BASE_URL=https://api.deepseek.com
-DEEPSEEK_MODEL=deepseek-chat
-
-TAVILY_API_KEY=your_tavily_api_key
-
-CHROMA_PERSIST_DIR=data/chroma_db
-UPLOAD_DIR=data/uploads
-SQLITE_DB_PATH=data/app.db
-EMBEDDING_MODEL_NAME=BAAI/bge-small-zh-v1.5
-```
-
-注意：
-
-```text
-backend/.env 不应提交到 Git。
-```
+工具不会输出或覆盖已有 Secret，可重复运行。`backend/.env` 不应提交到 Git；不要把 `.env.example` 的 `change-me` 用于实际环境。数据库首次初始化与旧库接管命令见上述本地开发文档。
 
 ---
 

@@ -17,6 +17,10 @@ class Settings(BaseModel):
     upload_dir: str = os.getenv("UPLOAD_DIR", "./data/uploads")
     chroma_persist_dir: str = os.getenv("CHROMA_PERSIST_DIR", "./data/chroma_db")
     sqlite_db_path: str = os.getenv("SQLITE_DB_PATH", "./data/app.db")
+    database_url: str = os.getenv("DATABASE_URL", "").strip()
+    enable_legacy_schema_patches: bool = (
+        os.getenv("ENABLE_LEGACY_SCHEMA_PATCHES", "false").lower() == "true"
+    )
     embedding_model_name: str = os.getenv(
         "EMBEDDING_MODEL_NAME",
         "BAAI/bge-small-zh-v1.5",
@@ -249,12 +253,19 @@ class Settings(BaseModel):
 
         if environment == "production" and not self.auth_cookie_secure:
             raise ValueError("生产环境必须启用 Secure Cookie")
+        if environment == "production" and self.jwt_secret_key.strip() in {
+            "",
+            "change-me",
+        }:
+            raise ValueError("生产环境必须配置 JWT_SECRET_KEY")
         if environment == "production" and self.auth_csrf_secret.strip() in {
             "",
             "change-me",
             self.jwt_secret_key.strip(),
         }:
             raise ValueError("生产环境必须配置独立的 AUTH_CSRF_SECRET")
+        if environment == "production" and self.enable_legacy_schema_patches:
+            raise ValueError("生产环境禁止启用旧版运行时 Schema 补丁")
 
         cookie_names = {
             self.auth_access_cookie_name,

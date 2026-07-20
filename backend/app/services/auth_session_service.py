@@ -11,6 +11,7 @@ from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.readiness import auth_unavailable_message
 from app.db.models import AuthSecurityEvent, AuthSession, User
 
 UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
@@ -59,7 +60,10 @@ def get_csrf_secret() -> bytes:
     if not secret or secret == "change-me":
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={"error_code": "auth_unavailable", "message": "认证服务尚未配置"},
+            detail={
+                "error_code": "auth_unavailable",
+                "message": auth_unavailable_message(settings),
+            },
         )
     return secret.encode("utf-8")
 

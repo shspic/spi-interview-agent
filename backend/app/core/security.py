@@ -9,6 +9,7 @@ from jwt import ExpiredSignatureError, InvalidTokenError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.readiness import auth_unavailable_message
 from app.core.input_validation import validate_safe_text
 from app.db.database import get_db
 from app.db.models import AuthSession, User
@@ -68,7 +69,10 @@ def get_jwt_secret_key() -> str:
     if not secret_key or secret_key == "change-me":
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="认证服务尚未配置",
+            detail={
+                "error_code": "auth_unavailable",
+                "message": auth_unavailable_message(settings),
+            },
         )
     return secret_key
 

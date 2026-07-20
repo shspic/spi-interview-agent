@@ -14,6 +14,7 @@ backend/.env
 
 # Backend data
 backend/data/
+backend/backups/
 *.db
 *.sqlite
 *.sqlite3

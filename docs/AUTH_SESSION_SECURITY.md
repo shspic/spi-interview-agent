@@ -81,14 +81,14 @@ AUTH_CSRF_SECRET=change-me
 AUTH_REQUIRE_ORIGIN_CHECK=true
 ```
 
-本地 HTTP 开发可显式使用 `Secure=false`。开发环境在未设置 `AUTH_CSRF_SECRET` 时为兼容旧 `.env` 会回退到 `JWT_SECRET_KEY`；生产环境启动校验要求独立 CSRF Secret、Secure Cookie 和明确 CORS origins。不要提交真实 `.env`。
+本地 HTTP 开发可显式使用 `Secure=false`。首次运行 `python -m scripts.bootstrap_local_env` 会补齐独立 JWT/CSRF Secret 且不显示值；开发环境缺配置时返回该可操作命令，生产环境则在启动时 fail-fast。生产还要求 Secure Cookie 和明确 CORS origins。不要提交真实 `.env`。
 
 ## 11. 安全事件与日志
 
 `auth_security_events` 记录 `login_success`、`login_failed`、`session_refreshed`、`logout`、`logout_all`、`password_changed`、`admin_password_reset`、`account_disabled`、`session_revoked`、`csrf_rejected` 等脱敏事件。只保存用户 ID、事件、结果、会话 ID 的 12 位哈希和时间，不保存密码、邀请码、Token、Cookie、CSRF、完整 IP 或 User-Agent。安全事件纳入现有 `DATA_RETENTION_DAYS` 预览与过期清理，不改变当前保留天数；正式上线前可再根据合规要求拆分独立周期和访问权限。
 
-## 12. SQLite 增量兼容与局限
+## 12. Alembic 与局限
 
-当前继续使用 `Base.metadata.create_all`：旧库启动时只新增 `auth_sessions`、`auth_security_events` 及索引，不重建用户表、不删除旧数据。旧 JWT 缺少 `session_id`、`token_type` 和 `jti`，Cookie 认证也不读取 Authorization，因此立即失效。
+Schema 已由 Alembic 基线 `20260720_0001` 接管。正常开发和生产启动不再调用 `create_all` 或手工补列；旧数据库必须先核验、备份，再 stamp。旧 JWT 缺少 `session_id`、`token_type` 和 `jti`，Cookie 认证也不读取 Authorization，因此立即失效。具体流程见 `DATABASE_MIGRATIONS.md`。
 
-已知局限：SQLite 写锁适合当前单机阶段，但不是多实例会话协调方案；本阶段没有设备管理列表、复杂风控、OAuth 或分布式会话存储。下一阶段数据库结构变更必须由 Alembic 接管；若未来迁移 PostgreSQL/多实例，再评估集中式撤销与限流，不应在本阶段提前引入 Redis。
+已知局限：SQLite 写锁适合当前单机阶段，但不是多实例会话协调方案；当前没有设备管理列表、复杂风控、OAuth 或分布式会话存储。若未来迁移 PostgreSQL/多实例，再评估集中式撤销与限流，不在本阶段引入 Redis。

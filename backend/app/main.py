@@ -8,7 +8,8 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.health import router as health_router
-from app.db.database import SessionLocal, init_db
+from app.db.database import SessionLocal, engine, init_db
+from app.db.schema_version import require_current_schema
 from app.api.files import router as files_router
 from app.api.knowledge import router as knowledge_router
 from app.api.llm import router as llm_router
@@ -37,11 +38,16 @@ from app.services.registration_setting_service import (
 )
 from app.core.config import settings
 from app.core.http_security import HTTPSecurityMiddleware
+from app.core.readiness import validate_auth_startup
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    init_db()
+    validate_auth_startup(settings)
+    if settings.enable_legacy_schema_patches:
+        init_db()
+    elif settings.app_environment != "test":
+        require_current_schema(engine)
     db = SessionLocal()
     try:
         ensure_registration_setting(db)

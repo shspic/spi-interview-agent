@@ -1,5 +1,6 @@
 aiohappyeyeballs==2.6.2
 aiohttp==3.14.1
+alembic==1.16.5
 aiosignal==1.4.0
 annotated-doc==0.0.4
 annotated-types==0.7.0
@@ -47,6 +48,7 @@ langgraph-prebuilt==1.1.0
 langgraph-sdk==0.4.2
 langsmith==0.8.12
 markdown-it-py==4.2.0
+Mako==1.3.12
 MarkupSafe==3.0.3
 mdurl==0.1.2
 mmh3==5.2.1

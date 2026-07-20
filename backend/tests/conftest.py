@@ -1,3 +1,12 @@
+import os
+
+os.environ["SKIP_DOTENV"] = "1"
+os.environ["APP_ENVIRONMENT"] = "test"
+os.environ["DATABASE_URL"] = "sqlite://"
+os.environ["JWT_SECRET_KEY"] = "test-jwt-secret-key-with-sufficient-length"
+os.environ["AUTH_CSRF_SECRET"] = "test-csrf-secret-with-sufficient-length"
+os.environ["REGISTRATION_INVITE_CODE"] = "test-invite-code"
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event
