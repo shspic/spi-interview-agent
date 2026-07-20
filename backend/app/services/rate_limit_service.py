@@ -7,7 +7,8 @@ from time import time
 
 from fastapi import HTTPException, Request, status
 from sqlalchemy import delete
-from sqlalchemy.dialects.sqlite import insert
+from sqlalchemy.dialects.postgresql import insert as postgresql_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -128,7 +129,11 @@ def enforce_rate_limit(
     db.execute(
         delete(RateLimitBucket).where(RateLimitBucket.expires_at <= now_value)
     )
-    statement = insert(RateLimitBucket).values(
+    dialect_name = db.get_bind().dialect.name
+    insert_factory = (
+        postgresql_insert if dialect_name == "postgresql" else sqlite_insert
+    )
+    statement = insert_factory(RateLimitBucket).values(
         scope=scope,
         subject_type=subject_type,
         subject_hash=subject_hash,

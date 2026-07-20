@@ -10,13 +10,10 @@ import {
   getInterviewComparison,
   getInterviewSession,
   getInterviewSessions,
-  retryImprovementGeneration,
-  startInterviewSession,
   updateImprovementTask,
 } from "../api/interviewTraining";
 import {
   deleteResumeDescription,
-  generateResumeDescription,
   getResumeDescription,
   getResumeDescriptions,
 } from "../api/resumeDescriptions";
@@ -27,6 +24,7 @@ import InterviewSetup from "../components/interview/InterviewSetup";
 import InterviewWorkspace from "../components/interview/InterviewWorkspace";
 import ResumeDescriptionPanel from "../components/interview/ResumeDescriptionPanel";
 import { getFriendlyErrorMessage } from "../utils/errorMessage";
+import useBackgroundJob from "../hooks/useBackgroundJob";
 
 const ACTIVE_SESSION_KEY = "spi_interview_active_session";
 
@@ -158,29 +156,46 @@ function InterviewAgent({ onOpenProfile, onOpenKnowledge, requestedSessionId }) 
     return nextSessions;
   }, []);
 
+  const startTask = useBackgroundJob("interview-start", async (result) => {
+    await loadSession(result.session_id, "interview");
+    setLatestResult(null);
+    setRetryInfo(null);
+    await refreshSessions();
+    setMessage("面试会话已启动。");
+  });
+  const improvementTask = useBackgroundJob("interview-improvement", async (result) => {
+    await loadSession(result.session_id, "tasks");
+    await refreshSessions();
+    setMessage("改进任务已生成。");
+  });
+  const resumeTask = useBackgroundJob("interview-resume", async (result) => {
+    const generated = await getResumeDescription(result.description_id);
+    setDescriptions((current) => [
+      generated,
+      ...current.filter((item) => item.id !== generated.id),
+    ]);
+    setSelectedDescription(generated);
+    setMessage("简历项目描述已生成并保存为新版本。");
+  });
+  const backgroundRunning =
+    startTask.isRunning || improvementTask.isRunning || resumeTask.isRunning;
+  const pageBusy = Boolean(busyAction) || backgroundRunning;
+  const activeBackgroundTask = [startTask, improvementTask, resumeTask].find(
+    (item) => item.isRunning,
+  );
+
   const runStart = async (sessionId) => {
     setBusyAction("start");
     setMessage("");
     try {
-      const started = await startInterviewSession(sessionId);
-      setSession(started);
-      setLatestResult(null);
-      setRetryInfo(null);
-      setActiveSection("interview");
-      localStorage.setItem(ACTIVE_SESSION_KEY, String(started.id));
-      await refreshSessions();
+      await startTask.createJob(
+        "/api/tasks/interview-start",
+        { session_id: sessionId },
+        `interview-start-${sessionId}`,
+      );
+      setMessage("面试启动任务已进入后台队列。");
     } catch (error) {
-      if (error.response?.status === 409) {
-        const detail = await loadSession(sessionId);
-        setMessage(detail.status === "in_progress" ? "会话已经启动，已恢复当前问题。" : getFriendlyErrorMessage(error, "会话状态冲突。"));
-      } else {
-        try {
-          await loadSession(sessionId, "setup");
-        } catch {
-          // 保留原始错误信息，避免用二次读取错误覆盖。
-        }
-        setMessage(getFriendlyErrorMessage(error, "会话已创建，但启动失败。可稍后重新开始。"));
-      }
+      setMessage(getFriendlyErrorMessage(error, "会话已创建，但后台任务入队失败。"));
     } finally {
       setBusyAction("");
     }
@@ -284,12 +299,13 @@ function InterviewAgent({ onOpenProfile, onOpenKnowledge, requestedSessionId }) 
   const handleImprovementRetry = async () => {
     setBusyAction("improvements");
     try {
-      await retryImprovementGeneration(session.id);
-      await loadSession(session.id, "tasks");
-      await refreshSessions();
-      setMessage("改进任务已生成。" );
+      await improvementTask.createJob(
+        "/api/tasks/improvements",
+        { session_id: session.id },
+        `improvements-${session.id}`,
+      );
+      setMessage("改进任务生成已进入后台队列。" );
     } catch (error) {
-      await loadSession(session.id, "result");
       setMessage(getFriendlyErrorMessage(error, "改进任务生成仍未成功，可稍后重试。"));
     } finally {
       setBusyAction("");
@@ -342,10 +358,12 @@ function InterviewAgent({ onOpenProfile, onOpenKnowledge, requestedSessionId }) 
   const handleGenerateResume = async (payload) => {
     setBusyAction("resume");
     try {
-      const generated = await generateResumeDescription(payload);
-      setDescriptions((current) => [generated, ...current]);
-      setSelectedDescription(generated);
-      setMessage("简历项目描述已生成并保存为新版本。" );
+      await resumeTask.createJob(
+        "/api/tasks/resume",
+        { ...payload, project_file_ids: payload.project_file_ids || [] },
+        `resume-${payload.session_id}`,
+      );
+      setMessage("简历项目描述任务已进入后台队列。" );
     } catch (error) {
       setMessage(getFriendlyErrorMessage(error, "生成简历项目描述失败，已有历史版本未受影响。"));
     } finally {
@@ -411,7 +429,7 @@ function InterviewAgent({ onOpenProfile, onOpenKnowledge, requestedSessionId }) 
           <div><button type="button" onClick={onOpenProfile}>完善资料</button><button type="button" className="secondary-button" onClick={onOpenKnowledge}>前往知识库</button></div>
         </div>
       )}
-      <InterviewSetup targetJobs={targetJobs} projectFiles={projectFiles} activeJob={activeJob} busy={Boolean(busyAction)} draftSession={session?.status === "draft" ? session : null} onCreate={handleCreate} onStartDraft={runStart} />
+      <InterviewSetup targetJobs={targetJobs} projectFiles={projectFiles} activeJob={activeJob} busy={pageBusy} draftSession={session?.status === "draft" ? session : null} onCreate={handleCreate} onStartDraft={runStart} />
     </>
   );
 
@@ -437,7 +455,7 @@ function InterviewAgent({ onOpenProfile, onOpenKnowledge, requestedSessionId }) 
         </div>
         <div className="result-actions">
           <button type="button" onClick={() => setActiveSection("tasks")}>查看改进任务</button>
-          <button type="button" onClick={handleRetrySession} disabled={Boolean(busyAction)}>再次练习</button>
+          <button type="button" onClick={handleRetrySession} disabled={pageBusy}>再次练习</button>
           <button type="button" onClick={() => setActiveSection("resume")}>生成简历描述</button>
           {session.previous_session && <button type="button" className="secondary-button" onClick={handleLoadComparison}>查看成绩对比</button>}
         </div>
@@ -445,7 +463,7 @@ function InterviewAgent({ onOpenProfile, onOpenKnowledge, requestedSessionId }) 
           <strong>改进任务状态：{session.improvement_status}</strong>
           {session.improvement_summary && <p>{session.improvement_summary}</p>}
           {session.next_round_strategy && <p><strong>下一轮策略：</strong>{session.next_round_strategy}</p>}
-          {session.improvement_status === "failed" && <button type="button" onClick={handleImprovementRetry} disabled={Boolean(busyAction)}>重试生成改进任务</button>}
+          {session.improvement_status === "failed" && <button type="button" onClick={handleImprovementRetry} disabled={pageBusy}>重试生成改进任务</button>}
         </div>
         {comparison && <ComparisonPanel comparison={comparison} />}
         <div className="turn-review-list">
@@ -458,11 +476,11 @@ function InterviewAgent({ onOpenProfile, onOpenKnowledge, requestedSessionId }) 
 
   const renderCurrentSection = () => {
     if (activeSection === "setup") return renderPreparation();
-    if (activeSection === "interview") return session?.status === "in_progress" ? <InterviewWorkspace key={`${session.id}-${session.current_question?.id || recoveryTurn?.id || "result"}-${latestResult?.answered_turn?.id || "answer"}`} session={session} latestResult={latestResult} recoveryTurn={recoveryTurn} busy={Boolean(busyAction)} onSubmit={handleAnswer} onContinue={handleContinue} onCopy={handleCopy} onCancel={handleCancel} /> : <div className="interview-alert warning"><strong>没有进行中的会话</strong><p>从“准备面试”创建新会话，或从最近会话恢复草稿。</p></div>;
+    if (activeSection === "interview") return session?.status === "in_progress" ? <InterviewWorkspace key={`${session.id}-${session.current_question?.id || recoveryTurn?.id || "result"}-${latestResult?.answered_turn?.id || "answer"}`} session={session} latestResult={latestResult} recoveryTurn={recoveryTurn} busy={pageBusy} onSubmit={handleAnswer} onContinue={handleContinue} onCopy={handleCopy} onCancel={handleCancel} /> : <div className="interview-alert warning"><strong>没有进行中的会话</strong><p>从“准备面试”创建新会话，或从最近会话恢复草稿。</p></div>;
     if (activeSection === "result") return renderResult();
     if (activeSection === "tasks") return session?.status === "completed" ? <><div className="strategy-panel"><h3>改进诊断</h3><p>{session.improvement_summary || "暂无诊断。"}</p><h4>下一轮训练策略</h4><p>{session.next_round_strategy || "暂无策略。"}</p>{session.improvement_status === "failed" && <button type="button" onClick={handleImprovementRetry}>重试生成</button>}</div><ImprovementTaskList tasks={session.improvement_tasks || []} updatingTaskId={updatingTaskId} onToggle={handleTaskToggle} /></> : <p className="empty-text">完成一场面试后查看改进任务。</p>;
-    if (activeSection === "retry") return retryInfo ? <div className="retry-confirmation"><span className="status-badge draft">再次练习草稿</span><h2>{retryInfo.title}</h2><p>上一轮任务共 {retryInfo.previous_task_count} 项，已完成 {retryInfo.completed_task_count} 项，完成率 {retryInfo.task_completion_rate}%。</p><p><strong>训练策略：</strong>{session.previous_session?.next_round_strategy || "启动后将使用上一轮策略和未完成任务作为计划参考，不作为事实证据。"}</p><button type="button" onClick={() => runStart(retryInfo.id)} disabled={Boolean(busyAction)}>确认并开始新一轮</button></div> : session?.previous_session ? <ComparisonPanel comparison={comparison} loading={busyAction === "comparison"} onLoad={handleLoadComparison} /> : <p className="empty-text">完成面试后可创建再次练习。</p>;
-    if (activeSection === "resume") return <ResumeDescriptionPanel completedSessions={completedSessions} targetJobs={targetJobs} projectFiles={projectFiles} descriptions={descriptions} selectedDescription={selectedDescription} generating={busyAction === "resume"} onGenerate={handleGenerateResume} onSelect={handleSelectDescription} onDelete={handleDeleteDescription} onCopy={handleCopy} />;
+    if (activeSection === "retry") return retryInfo ? <div className="retry-confirmation"><span className="status-badge draft">再次练习草稿</span><h2>{retryInfo.title}</h2><p>上一轮任务共 {retryInfo.previous_task_count} 项，已完成 {retryInfo.completed_task_count} 项，完成率 {retryInfo.task_completion_rate}%。</p><p><strong>训练策略：</strong>{session.previous_session?.next_round_strategy || "启动后将使用上一轮策略和未完成任务作为计划参考，不作为事实证据。"}</p><button type="button" onClick={() => runStart(retryInfo.id)} disabled={pageBusy}>确认并开始新一轮</button></div> : session?.previous_session ? <ComparisonPanel comparison={comparison} loading={busyAction === "comparison"} onLoad={handleLoadComparison} /> : <p className="empty-text">完成面试后可创建再次练习。</p>;
+    if (activeSection === "resume") return <ResumeDescriptionPanel completedSessions={completedSessions} targetJobs={targetJobs} projectFiles={projectFiles} descriptions={descriptions} selectedDescription={selectedDescription} generating={resumeTask.isRunning || busyAction === "resume"} onGenerate={handleGenerateResume} onSelect={handleSelectDescription} onDelete={handleDeleteDescription} onCopy={handleCopy} />;
     return null;
   };
 
@@ -474,9 +492,17 @@ function InterviewAgent({ onOpenProfile, onOpenKnowledge, requestedSessionId }) 
     <section className="interview-agent-page">
       <div className="interview-agent-heading">
         <div><h1>面试 Agent</h1><p>从真实资料出发，完成训练、评价、改进、复练和简历表达。</p></div>
-        <button type="button" className="secondary-button" onClick={loadInitialData} disabled={Boolean(busyAction)}>刷新数据</button>
+        <button type="button" className="secondary-button" onClick={loadInitialData} disabled={pageBusy}>刷新数据</button>
       </div>
       {message && <div className="workspace-message" role="status">{message}<button type="button" aria-label="关闭提示" onClick={() => setMessage("")}>×</button></div>}
+      {activeBackgroundTask?.job && (
+        <div className="status-box">
+          <p>后台任务：{activeBackgroundTask.job.task_type}</p>
+          <p>阶段：{activeBackgroundTask.job.phase}</p>
+          <p>进度：{activeBackgroundTask.job.progress_percent}%</p>
+          <button type="button" className="secondary-button" onClick={activeBackgroundTask.cancelJob}>取消任务</button>
+        </div>
+      )}
 
       <div className="interview-section-tabs" role="tablist">
         {sectionTabs.map(([key, label]) => <button key={key} type="button" role="tab" aria-selected={activeSection === key} className={activeSection === key ? "active" : ""} onClick={() => setActiveSection(key)}>{label}</button>)}
@@ -493,7 +519,7 @@ function InterviewAgent({ onOpenProfile, onOpenKnowledge, requestedSessionId }) 
                 <p>{modeLabels[item.mode]} · {formatDate(item.created_at)}</p>
                 {item.overall_score != null && <span>总分 {item.overall_score}</span>}
               </button>
-              <button type="button" className="session-delete-button" aria-label={`删除 ${item.title}`} onClick={() => handleDelete(item.id)} disabled={Boolean(busyAction)}>删除</button>
+              <button type="button" className="session-delete-button" aria-label={`删除 ${item.title}`} onClick={() => handleDelete(item.id)} disabled={pageBusy}>删除</button>
             </article>
           ))}
         </aside>

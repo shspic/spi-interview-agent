@@ -18,6 +18,8 @@ backend/backups/
 *.db
 *.sqlite
 *.sqlite3
+*.dump
+*.backup
 
 # ChromaDB / vector database
 chroma_db/

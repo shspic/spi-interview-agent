@@ -2,6 +2,7 @@ from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
 from sqlalchemy import create_engine, event, inspect, text
+from sqlalchemy.engine import make_url
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 from app.core.config import settings
@@ -9,22 +10,34 @@ from app.core.config import settings
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 
 
-def build_database_url() -> str:
-    configured_url = settings.database_url.strip()
+def build_database_url(config=settings) -> str:
+    configured_url = config.database_url.strip()
     if configured_url:
+        parsed_url = make_url(configured_url)
+        if parsed_url.drivername not in {"sqlite", "postgresql+psycopg"}:
+            raise ValueError("不支持的 DATABASE_URL 数据库驱动")
         if configured_url.startswith("sqlite:///./"):
             relative_path = unquote(configured_url.removeprefix("sqlite:///"))
             absolute_path = (BACKEND_DIR / relative_path).resolve()
             return f"sqlite:///{absolute_path.as_posix()}"
         return configured_url
 
-    configured_path = Path(settings.sqlite_db_path)
+    if config.app_environment == "production":
+        raise ValueError("生产环境不得回退到 SQLite，请显式配置 DATABASE_URL")
+
+    configured_path = Path(config.sqlite_db_path)
     if not configured_path.is_absolute():
         configured_path = BACKEND_DIR / configured_path
     return f"sqlite:///{configured_path.resolve().as_posix()}"
 
 
 SQLALCHEMY_DATABASE_URL = build_database_url()
+DATABASE_DIALECT = make_url(SQLALCHEMY_DATABASE_URL).get_backend_name()
+
+
+def sanitized_database_url(database_url: str = SQLALCHEMY_DATABASE_URL) -> str:
+    """仅供诊断使用，始终隐藏凭据。"""
+    return make_url(database_url).render_as_string(hide_password=True)
 
 
 def _prepare_sqlite_directory(database_url: str) -> None:
@@ -46,14 +59,16 @@ engine = create_engine(
         if SQLALCHEMY_DATABASE_URL.startswith("sqlite")
         else {}
     ),
+    pool_pre_ping=DATABASE_DIALECT == "postgresql",
 )
 
 
-@event.listens_for(engine, "connect")
-def enable_sqlite_foreign_keys(dbapi_connection, connection_record):
-    cursor = dbapi_connection.cursor()
-    cursor.execute("PRAGMA foreign_keys=ON")
-    cursor.close()
+if DATABASE_DIALECT == "sqlite":
+    @event.listens_for(engine, "connect")
+    def enable_sqlite_foreign_keys(dbapi_connection, connection_record):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
 
 SessionLocal = sessionmaker(
     autocommit=False,

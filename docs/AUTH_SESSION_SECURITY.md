@@ -1,5 +1,7 @@
 # 认证与会话安全
 
+PostgreSQL 下 Refresh Token 轮换继续使用旧 token hash 条件更新，不依赖先读后写；同一旧 Refresh Token 并发至多一个成功。任务取消等写接口同样受 Origin 与 CSRF 校验。
+
 ## 1. 迁移目标
 
 浏览器不再接收或保存 JWT。旧流程把 Access Token 写入 `localStorage` 并注入 `Authorization: Bearer`，任何能在页面执行的脚本都可能读取它，而且服务端无法按设备可靠撤销。新流程只使用服务端会话和 Cookie：Access、Refresh 都是 `HttpOnly`，前端只能维护安全的用户摘要。

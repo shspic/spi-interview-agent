@@ -32,6 +32,7 @@ from app.api.resume_project_descriptions import (
 from app.api.admin import router as admin_router
 from app.api.usage import router as usage_router
 from app.api.account import router as account_router
+from app.api.tasks import router as tasks_router
 from app.services.registration_setting_service import (
     RegistrationSettingError,
     ensure_registration_setting,
@@ -186,3 +187,4 @@ app.include_router(
 app.include_router(usage_router, prefix="/api", tags=["用户用量"])
 app.include_router(admin_router, prefix="/api", tags=["管理员"])
 app.include_router(account_router, prefix="/api", tags=["账号数据"])
+app.include_router(tasks_router, prefix="/api", tags=["后台任务"])

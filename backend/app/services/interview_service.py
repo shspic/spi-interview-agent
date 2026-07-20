@@ -145,12 +145,42 @@ def evaluate_interview_answer(
     user_answer: str,
     user_id: int,
     db: Session,
+    request_id: str | None = None,
 ) -> dict:
     if not question.strip():
         raise InterviewServiceError("面试问题不能为空")
 
     if not user_answer.strip():
         raise InterviewServiceError("用户回答不能为空")
+
+    if request_id:
+        existing = (
+            db.query(InterviewRecord)
+            .filter(
+                InterviewRecord.user_id == user_id,
+                InterviewRecord.session_id == request_id,
+            )
+            .first()
+        )
+        if existing is not None:
+            return {
+                "session_id": existing.session_id,
+                "evaluation": {
+                    "score_total": existing.score_total,
+                    "content_relevance": existing.content_relevance,
+                    "personal_match": existing.personal_match,
+                    "technical_accuracy": existing.technical_accuracy,
+                    "structure_score": existing.structure_score,
+                    "risk_control": existing.risk_control,
+                    "main_problems": existing.main_problems or "",
+                    "suggestions": existing.suggestions or "",
+                    "reference_answer": existing.reference_answer or "",
+                },
+                "sources": [],
+                "used_local_knowledge": True,
+                "used_web_search": False,
+                "web_sources": [],
+            }
 
     query = f"{interview_type}\n{job_description}\n{question}\n{user_answer}"
     context, sources = _build_context_and_sources(
@@ -175,7 +205,7 @@ def evaluate_interview_answer(
 
     evaluation = _extract_json_object(raw_evaluation)
 
-    session_id = str(uuid4())
+    session_id = request_id or str(uuid4())
 
     record = InterviewRecord(
         user_id=user_id,

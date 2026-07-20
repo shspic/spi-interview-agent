@@ -21,12 +21,17 @@ def test_baseline_upgrade_downgrade_and_reupgrade(tmp_path):
     engine = create_engine(url)
     try:
         tables = set(inspect(engine).get_table_names())
-        assert len(tables - {"alembic_version"}) == 20
+        assert len(tables - {"alembic_version"}) == 25
         assert {
             "auth_sessions",
             "auth_security_events",
             "rate_limit_buckets",
             "upload_reservations",
+            "background_jobs",
+            "background_job_events",
+            "background_job_artifacts",
+            "worker_heartbeats",
+            "maintenance_states",
         } <= tables
         assert compare_schema(engine, Base.metadata) == []
         assert get_schema_status(engine).ready is True

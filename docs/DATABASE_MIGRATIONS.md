@@ -1,5 +1,7 @@
 # 数据库迁移
 
+当前 head 为 `20260720_0002`。`0001` 保留已接管业务基线，`0002` 增加后台任务、Worker、维护表和 Resume 幂等字段，并修复 PostgreSQL 活跃岗位部分唯一索引。空 SQLite/PostgreSQL 必须通过 `alembic upgrade head` 初始化，禁止用 `Base.metadata.create_all()` 绕过。
+
 ## 1. 接管边界
 
 应用正常启动不再执行 `Base.metadata.create_all`、手工 `ALTER TABLE`、索引补丁或 `agent_runs` 重建。正式 Schema 由 Alembic 接管。旧函数只保留给显式兼容路径和隔离测试，默认关闭，production 禁止通过 `ENABLE_LEGACY_SCHEMA_PATCHES` 启用。

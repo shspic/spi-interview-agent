@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-import apiClient from "../api/client";
+import useBackgroundJob from "../hooks/useBackgroundJob";
 
 function JobAnalysis() {
   const [jobDescription, setJobDescription] = useState("");
@@ -13,6 +13,19 @@ function JobAnalysis() {
   const [historyRecordId, setHistoryRecordId] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
+  const { job, createJob, cancelJob, isRunning } = useBackgroundJob(
+    "job-analysis",
+    async (result) => {
+      setAnalysis(result.analysis || "");
+      setSources(result.sources || []);
+      setWebSources(result.web_sources || []);
+      setUsedLocalKnowledge(Boolean(result.used_local_knowledge));
+      setUsedWebSearch(Boolean(result.used_web_search));
+      setHistoryRecordId(result.history_record_id || "");
+      setMessage("岗位分析完成。");
+    },
+  );
+  const busy = loading || isRunning;
 
   const handleAnalyze = async () => {
     const trimmedJobDescription = jobDescription.trim();
@@ -37,18 +50,11 @@ function JobAnalysis() {
       setUsedWebSearch(false);
       setHistoryRecordId("");
 
-      const response = await apiClient.post("/api/jobs/analyze", {
+      await createJob("/api/tasks/job-analysis", {
         job_description: trimmedJobDescription,
         use_web_search: useWebSearch,
-      });
-
-      setAnalysis(response.data.analysis || "");
-      setSources(response.data.sources || []);
-      setWebSources(response.data.web_sources || []);
-      setUsedLocalKnowledge(Boolean(response.data.used_local_knowledge));
-      setUsedWebSearch(Boolean(response.data.used_web_search));
-      setHistoryRecordId(response.data.history_record_id || "");
-      setMessage("岗位分析完成。");
+      }, "job-analysis");
+      setMessage("岗位分析任务已进入后台队列。");
     } catch (error) {
       console.error("job analysis error:", error);
 
@@ -104,7 +110,7 @@ function JobAnalysis() {
             type="checkbox"
             checked={useWebSearch}
             onChange={(event) => setUseWebSearch(event.target.checked)}
-            disabled={loading}
+            disabled={busy}
           />
           <span>启用 Tavily 联网搜索，补充当前岗位市场信息</span>
         </label>
@@ -114,15 +120,15 @@ function JobAnalysis() {
         </p>
 
         <div className="chat-actions">
-          <button type="button" onClick={handleAnalyze} disabled={loading}>
-            {loading ? "分析中..." : "开始分析"}
+          <button type="button" onClick={handleAnalyze} disabled={busy}>
+            {busy ? "分析中..." : "开始分析"}
           </button>
 
           <button
             type="button"
             className="secondary-button"
             onClick={handleClear}
-            disabled={loading}
+            disabled={busy}
           >
             清空
           </button>
@@ -130,6 +136,19 @@ function JobAnalysis() {
       </div>
 
       {message && <p className="message-text">{message}</p>}
+
+      {job && (
+        <div className="status-box">
+          <p>任务状态：{job.status}</p>
+          <p>阶段：{job.phase}</p>
+          <p>进度：{job.progress_percent}%</p>
+          {isRunning && (
+            <button type="button" className="secondary-button" onClick={cancelJob}>
+              取消任务
+            </button>
+          )}
+        </div>
+      )}
 
       {analysis && (
         <div className="answer-card">

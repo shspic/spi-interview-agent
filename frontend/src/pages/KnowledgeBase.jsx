@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import apiClient from "../api/client";
 import { getFriendlyErrorMessage } from "../utils/errorMessage";
+import useBackgroundJob from "../hooks/useBackgroundJob";
 
 function KnowledgeBase() {
   const [files, setFiles] = useState([]);
@@ -47,6 +48,17 @@ function KnowledgeBase() {
     await fetchFiles();
     await fetchKnowledgeStatus();
   }, [fetchFiles, fetchKnowledgeStatus]);
+
+  const { job, createJob, cancelJob, isRunning } = useBackgroundJob(
+    "knowledge-rebuild",
+    async (result) => {
+      setMessage(
+        `知识库索引重建完成。当前向量片段数：${result.total_chunks || 0}`,
+      );
+      await refreshAll();
+    },
+  );
+  const busy = loading || isRunning;
 
   useEffect(() => {
     const timerId = window.setTimeout(refreshAll, 0);
@@ -153,18 +165,12 @@ function KnowledgeBase() {
       setLoading(true);
       setMessage("正在重建知识库索引，首次加载 embedding 模型可能较慢...");
 
-      const response = await apiClient.post("/api/knowledge/rebuild");
-
-      const totalChunks =
-        response.data.total_chunks ??
-        response.data.chunk_count ??
-        response.data.knowledge_base?.total_chunks ??
-        0;
-
-      setMessage(`知识库索引重建完成。当前向量片段数：${totalChunks}`);
-
-      await fetchFiles();
-      await fetchKnowledgeStatus();
+      await createJob(
+        "/api/tasks/knowledge-rebuild",
+        {},
+        "knowledge-rebuild",
+      );
+      setMessage("知识库索引任务已进入后台队列。");
     } catch (error) {
       console.error("rebuild knowledge error:", error);
 
@@ -188,6 +194,7 @@ function KnowledgeBase() {
           type="file"
           accept=".md,.txt,.pdf"
           onChange={handleFileChange}
+          disabled={busy}
         />
 
         <select
@@ -200,8 +207,8 @@ function KnowledgeBase() {
           <option value="other">其他</option>
         </select>
 
-        <button type="button" onClick={handleUpload} disabled={loading}>
-          {loading ? "处理中..." : "上传文件"}
+        <button type="button" onClick={handleUpload} disabled={busy}>
+          {busy ? "处理中..." : "上传文件"}
         </button>
       </div>
 
@@ -212,20 +219,33 @@ function KnowledgeBase() {
       )}
 
       <div className="chat-actions">
-        <button type="button" onClick={refreshAll} disabled={loading}>
+        <button type="button" onClick={refreshAll} disabled={busy}>
           刷新文件与状态
         </button>
 
-        <button type="button" onClick={fetchKnowledgeStatus} disabled={loading}>
+        <button type="button" onClick={fetchKnowledgeStatus} disabled={busy}>
           刷新知识库状态
         </button>
 
-        <button type="button" onClick={handleRebuildKnowledge} disabled={loading}>
+        <button type="button" onClick={handleRebuildKnowledge} disabled={busy}>
           重建知识库索引
         </button>
       </div>
 
       {message && <p className="message-text">{message}</p>}
+
+      {job && (
+        <div className="status-box">
+          <p>任务状态：{job.status}</p>
+          <p>阶段：{job.phase}</p>
+          <p>进度：{job.progress_percent}%</p>
+          {isRunning && (
+            <button type="button" className="secondary-button" onClick={cancelJob}>
+              取消任务
+            </button>
+          )}
+        </div>
+      )}
 
       {knowledgeStatus && (
         <div className="status-box">
@@ -261,7 +281,7 @@ function KnowledgeBase() {
       <div className="table-header">
         <h2>已上传文件</h2>
 
-        <button type="button" onClick={fetchFiles} disabled={loading}>
+        <button type="button" onClick={fetchFiles} disabled={busy}>
           刷新列表
         </button>
       </div>
@@ -300,7 +320,7 @@ function KnowledgeBase() {
                     type="button"
                     className="danger-button"
                     onClick={() => handleDelete(file.file_id)}
-                    disabled={loading}
+                    disabled={busy}
                   >
                     删除
                   </button>

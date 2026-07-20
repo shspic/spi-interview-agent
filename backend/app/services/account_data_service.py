@@ -5,6 +5,8 @@ from sqlalchemy.orm import Session
 
 from app.db.models import (
     AgentRun,
+    BackgroundJob,
+    BackgroundJobArtifact,
     FileRecord,
     HistoryRecord,
     ImprovementTask,
@@ -41,6 +43,8 @@ def _resource_counts(db: Session, user_id: int) -> dict[str, int]:
         "improvement_tasks": ImprovementTask,
         "resume_project_descriptions": ResumeProjectDescription,
         "agent_runs": AgentRun,
+        "background_jobs": BackgroundJob,
+        "background_job_artifacts": BackgroundJobArtifact,
     }
     return {
         name: db.query(func.count(model.id))
@@ -157,6 +161,8 @@ def cleanup_user_business_data(db: Session, user_id: int) -> dict:
         }
 
     deletion_models = (
+        BackgroundJob,
+        BackgroundJobArtifact,
         ImprovementTask,
         InterviewTurn,
         AgentRun,

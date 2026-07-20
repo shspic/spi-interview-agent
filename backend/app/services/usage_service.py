@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone, tzinfo
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy import update
+from sqlalchemy.dialects.postgresql import insert as postgresql_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -92,8 +93,13 @@ def _ensure_counter(
     usage_date: str,
     now_text: str,
 ) -> None:
+    insert_factory = (
+        postgresql_insert
+        if db.get_bind().dialect.name == "postgresql"
+        else sqlite_insert
+    )
     statement = (
-        sqlite_insert(DailyUsageCounter)
+        insert_factory(DailyUsageCounter)
         .values(
             user_id=user_id,
             usage_type=usage_type,
@@ -119,8 +125,11 @@ def _release_stale_reservations(
     stale_before = (
         local_now - timedelta(minutes=RESERVATION_TIMEOUT_MINUTES)
     ).isoformat(timespec="seconds")
+    stale_query = db.query(UsageEvent)
+    if db.get_bind().dialect.name == "postgresql":
+        stale_query = stale_query.with_for_update()
     stale_events = (
-        db.query(UsageEvent)
+        stale_query
         .filter(
             UsageEvent.user_id == user_id,
             UsageEvent.usage_type == usage_type,
@@ -135,8 +144,11 @@ def _release_stale_reservations(
 
     released_amount = sum(event.amount for event in stale_events)
     now_text = local_now.isoformat(timespec="seconds")
+    counter_query = db.query(DailyUsageCounter)
+    if db.get_bind().dialect.name == "postgresql":
+        counter_query = counter_query.with_for_update()
     counter = (
-        db.query(DailyUsageCounter)
+        counter_query
         .filter(
             DailyUsageCounter.user_id == user_id,
             DailyUsageCounter.usage_type == usage_type,
@@ -223,8 +235,11 @@ def reserve_usage(
     if released_stale:
         db.commit()
 
+    existing_query = db.query(UsageEvent)
+    if db.get_bind().dialect.name == "postgresql":
+        existing_query = existing_query.with_for_update()
     existing = (
-        db.query(UsageEvent)
+        existing_query
         .filter(
             UsageEvent.user_id == user_id,
             UsageEvent.usage_type == usage_type,
@@ -343,7 +358,10 @@ def reserve_usage(
 
 
 def commit_usage(db: Session, reservation: UsageReservation) -> UsageEvent:
-    event = db.get(UsageEvent, reservation.event_id)
+    event_query = db.query(UsageEvent).filter(UsageEvent.id == reservation.event_id)
+    if db.get_bind().dialect.name == "postgresql":
+        event_query = event_query.with_for_update()
+    event = event_query.first()
     if event is None:
         raise UsageServiceError(500, "用量记录不存在")
     if event.status == "succeeded":
@@ -352,8 +370,11 @@ def commit_usage(db: Session, reservation: UsageReservation) -> UsageEvent:
         raise UsageServiceError(409, "用量记录当前不可提交")
 
     now_text = get_local_now().isoformat(timespec="seconds")
+    counter_query = db.query(DailyUsageCounter)
+    if db.get_bind().dialect.name == "postgresql":
+        counter_query = counter_query.with_for_update()
     counter = (
-        db.query(DailyUsageCounter)
+        counter_query
         .filter(
             DailyUsageCounter.user_id == event.user_id,
             DailyUsageCounter.usage_type == event.usage_type,
@@ -379,15 +400,21 @@ def release_usage(
     reservation: UsageReservation,
     error_type: str | None = None,
 ) -> UsageEvent:
-    event = db.get(UsageEvent, reservation.event_id)
+    event_query = db.query(UsageEvent).filter(UsageEvent.id == reservation.event_id)
+    if db.get_bind().dialect.name == "postgresql":
+        event_query = event_query.with_for_update()
+    event = event_query.first()
     if event is None:
         raise UsageServiceError(500, "用量记录不存在")
     if event.status != "reserved":
         return event
 
     now_text = get_local_now().isoformat(timespec="seconds")
+    counter_query = db.query(DailyUsageCounter)
+    if db.get_bind().dialect.name == "postgresql":
+        counter_query = counter_query.with_for_update()
     counter = (
-        db.query(DailyUsageCounter)
+        counter_query
         .filter(
             DailyUsageCounter.user_id == event.user_id,
             DailyUsageCounter.usage_type == event.usage_type,

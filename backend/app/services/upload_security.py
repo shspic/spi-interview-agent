@@ -16,7 +16,7 @@ from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.db.models import FileRecord, UploadReservation
+from app.db.models import FileRecord, UploadReservation, User
 
 ALLOWED_FILE_RULES = {
     ".pdf": {
@@ -351,7 +351,10 @@ def reserve_user_storage(db: Session, user_id: int, size_bytes: int) -> str:
     max_storage_bytes = settings.max_user_storage_mb * 1024 * 1024
 
     db.commit()
-    db.execute(text("BEGIN IMMEDIATE"))
+    if db.get_bind().dialect.name == "sqlite":
+        db.execute(text("BEGIN IMMEDIATE"))
+    else:
+        db.query(User.id).filter(User.id == user_id).with_for_update().one()
     try:
         db.query(UploadReservation).filter(
             UploadReservation.expires_at <= now_value

@@ -128,6 +128,7 @@ def test_auth_readiness_and_production_fail_fast():
     )
     production = Settings(
         app_environment="production",
+        database_url="postgresql+psycopg://user:password@db/test_app",
         jwt_secret_key="valid-jwt",
         auth_csrf_secret="valid-csrf",
         auth_cookie_secure=True,
@@ -142,6 +143,7 @@ def test_production_rejects_missing_jwt_secret():
     with pytest.raises(ValueError, match="JWT_SECRET_KEY"):
         Settings(
             app_environment="production",
+            database_url="postgresql+psycopg://user:password@db/test_app",
             jwt_secret_key="",
             auth_csrf_secret="valid-csrf",
             auth_cookie_secure=True,

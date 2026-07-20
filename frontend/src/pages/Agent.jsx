@@ -1,7 +1,7 @@
 import { useState } from "react";
 
-import apiClient from "../api/client";
 import { getFriendlyErrorMessage } from "../utils/errorMessage";
+import useBackgroundJob from "../hooks/useBackgroundJob";
 
 const modeOptions = [
   {
@@ -45,6 +45,23 @@ function Agent() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
 
+  const { job, createJob, cancelJob, isRunning } = useBackgroundJob(
+    "agent-ask",
+    async (result) => {
+      setAnswer(result.answer || "");
+      setRoute(result.route || "");
+      setRouteReason(result.route_reason || "");
+      setExecutionSteps(result.execution_steps || []);
+      setSources(result.sources || []);
+      setWebSources(result.web_sources || []);
+      setUsedLocalKnowledge(Boolean(result.used_local_knowledge));
+      setUsedWebSearch(Boolean(result.used_web_search));
+      setHistoryRecordId(result.history_record_id || "");
+      setMessage("Agent 回答生成成功。");
+    },
+  );
+  const busy = loading || isRunning;
+
   const resetResult = () => {
     setAnswer("");
     setRoute("");
@@ -70,23 +87,13 @@ function Agent() {
       setMessage("LangGraph Agent 正在处理问题...");
       resetResult();
 
-      const response = await apiClient.post("/api/agent/ask", {
+      await createJob("/api/tasks/agent-ask", {
         question: trimmedQuestion,
         mode,
         top_k: Number(topK),
         max_web_results: Number(maxWebResults),
-      });
-
-      setAnswer(response.data.answer || "");
-      setRoute(response.data.route || "");
-      setRouteReason(response.data.route_reason || "");
-      setExecutionSteps(response.data.execution_steps || []);
-      setSources(response.data.sources || []);
-      setWebSources(response.data.web_sources || []);
-      setUsedLocalKnowledge(Boolean(response.data.used_local_knowledge));
-      setUsedWebSearch(Boolean(response.data.used_web_search));
-      setHistoryRecordId(response.data.history_record_id || "");
-      setMessage("Agent 回答生成成功。");
+      }, "agent-ask");
+      setMessage("Agent 任务已进入后台队列。");
     } catch (error) {
       console.error("agent ask error:", error);
 
@@ -143,7 +150,7 @@ function Agent() {
           id="agent-mode"
           value={mode}
           onChange={(event) => setMode(event.target.value)}
-          disabled={loading}
+          disabled={busy}
         >
           {modeOptions.map((option) => (
             <option key={option.value} value={option.value}>
@@ -170,7 +177,7 @@ function Agent() {
                   Math.min(10, Math.max(1, Number(event.target.value) || 1))
                 )
               }
-              disabled={loading}
+              disabled={busy}
             />
           </div>
 
@@ -187,7 +194,7 @@ function Agent() {
                   Math.min(10, Math.max(1, Number(event.target.value) || 1))
                 )
               }
-              disabled={loading}
+              disabled={busy}
             />
           </div>
         </div>
@@ -199,7 +206,7 @@ function Agent() {
             onClick={() =>
               setQuestion("根据我的本地知识库，介绍这个 RAG 项目的核心流程。")
             }
-            disabled={loading}
+            disabled={busy}
           >
             填入本地知识库样例
           </button>
@@ -212,22 +219,22 @@ function Agent() {
                 "结合当前 AI 应用开发实习岗位要求，分析我的 RAG 项目怎么准备面试。"
               )
             }
-            disabled={loading}
+            disabled={busy}
           >
             填入混合检索样例
           </button>
         </div>
 
         <div className="chat-actions">
-          <button type="button" onClick={handleAskAgent} disabled={loading}>
-            {loading ? "处理中..." : "提交给 Agent"}
+          <button type="button" onClick={handleAskAgent} disabled={busy}>
+            {busy ? "处理中..." : "提交给 Agent"}
           </button>
 
           <button
             type="button"
             className="secondary-button"
             onClick={handleClear}
-            disabled={loading}
+            disabled={busy}
           >
             清空
           </button>
@@ -235,6 +242,19 @@ function Agent() {
       </div>
 
       {message && <p className="message-text">{message}</p>}
+
+      {job && (
+        <div className="status-box">
+          <p>任务状态：{job.status}</p>
+          <p>阶段：{job.phase}</p>
+          <p>进度：{job.progress_percent}%</p>
+          {isRunning && (
+            <button type="button" className="secondary-button" onClick={cancelJob}>
+              取消任务
+            </button>
+          )}
+        </div>
+      )}
 
       {answer && (
         <div className="answer-card">

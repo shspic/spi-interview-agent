@@ -1,5 +1,7 @@
 # 本地开发安全初始化
 
+本地不设置 `DATABASE_URL` 时继续使用 `SQLITE_DB_PATH`。验证 PostgreSQL 时显式设置 `DATABASE_URL=postgresql+psycopg://...`；生产禁止回退 SQLite。后台任务需另启 `.venv\Scripts\python.exe -m app.worker`，SQLite 只允许一个 Worker。
+
 ## 1. 首次安装
 
 本地统一使用前端 `http://localhost:5173`、后端 `http://localhost:8000`。Uvicorn 可以监听 `127.0.0.1`，但浏览器地址和 `VITE_API_BASE_URL` 应使用 `localhost`，不要在同一次会话中混用两个主机名。

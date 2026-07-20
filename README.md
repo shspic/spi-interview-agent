@@ -2,6 +2,7 @@
 
 > 浏览器认证已改为 HttpOnly Access/Refresh Cookie、服务端可撤销会话和会话绑定 CSRF，不再把 JWT 保存到 `localStorage`。本地与生产配置见 [认证与会话安全](docs/AUTH_SESSION_SECURITY.md)。
 > 本地首次启动、Secret 初始化和现有 SQLite 接管见 [本地开发安全初始化](docs/LOCAL_DEVELOPMENT_SETUP.md)；Schema 变更由 [Alembic 数据库迁移](docs/DATABASE_MIGRATIONS.md) 管理。
+> PostgreSQL、Worker、Docker、备份与默认离线的模型验证见 [生产数据库](docs/POSTGRESQL_PRODUCTION.md)、[后台任务](docs/BACKGROUND_JOBS.md)、[Docker](docs/DOCKER_PRODUCTION.md)、[备份恢复](docs/BACKUP_AND_RECOVERY.md) 和 [真实模型验证](docs/LIVE_MODEL_VALIDATION.md)。
 
 SPI面试Agent 是一个面向 AI 应用开发实习求职场景的智能面试训练与岗位匹配系统。
 

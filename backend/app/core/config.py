@@ -89,6 +89,36 @@ class Settings(BaseModel):
         os.getenv("DAILY_MULTI_AGENT_TASK_LIMIT", "3")
     )
     data_retention_days: int = int(os.getenv("DATA_RETENTION_DAYS", "7"))
+    job_poll_interval_seconds: float = Field(
+        default=float(os.getenv("JOB_POLL_INTERVAL_SECONDS", "1")),
+        ge=0.1,
+        le=60,
+    )
+    job_lease_seconds: int = Field(
+        default=int(os.getenv("JOB_LEASE_SECONDS", "60")),
+        ge=10,
+        le=3600,
+    )
+    job_heartbeat_seconds: int = Field(
+        default=int(os.getenv("JOB_HEARTBEAT_SECONDS", "10")),
+        ge=2,
+        le=300,
+    )
+    job_max_attempts: int = Field(
+        default=int(os.getenv("JOB_MAX_ATTEMPTS", "3")),
+        ge=1,
+        le=10,
+    )
+    worker_concurrency: int = Field(
+        default=int(os.getenv("WORKER_CONCURRENCY", "1")),
+        ge=1,
+        le=16,
+    )
+    job_history_days: int = Field(
+        default=int(os.getenv("JOB_HISTORY_DAYS", "30")),
+        ge=1,
+        le=365,
+    )
 
     trusted_proxy_cidrs: tuple[str, ...] = tuple(
         value.strip()
@@ -266,6 +296,21 @@ class Settings(BaseModel):
             raise ValueError("生产环境必须配置独立的 AUTH_CSRF_SECRET")
         if environment == "production" and self.enable_legacy_schema_patches:
             raise ValueError("生产环境禁止启用旧版运行时 Schema 补丁")
+        configured_database_url = self.database_url.strip()
+        if configured_database_url:
+            scheme = urlsplit(configured_database_url).scheme.lower()
+            if scheme not in {"sqlite", "postgresql+psycopg"}:
+                raise ValueError(
+                    "DATABASE_URL 仅支持 sqlite 或 postgresql+psycopg"
+                )
+        if environment == "production":
+            if not configured_database_url:
+                raise ValueError("生产环境必须显式配置 DATABASE_URL")
+            if not configured_database_url.startswith("postgresql+psycopg://"):
+                raise ValueError("生产环境 DATABASE_URL 必须使用 PostgreSQL psycopg 驱动")
+
+        if self.job_heartbeat_seconds * 2 >= self.job_lease_seconds:
+            raise ValueError("JOB_HEARTBEAT_SECONDS 必须小于 lease 时间的一半")
 
         cookie_names = {
             self.auth_access_cookie_name,

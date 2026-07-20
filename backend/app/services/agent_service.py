@@ -355,6 +355,7 @@ def ask_agent(
     mode: AgentMode = "auto",
     top_k: int = 5,
     max_web_results: int = 5,
+    request_id: str | None = None,
 ) -> dict:
     cleaned_question = question.strip()
 
@@ -366,6 +367,29 @@ def ask_agent(
 
     if max_web_results < 1 or max_web_results > 10:
         raise AgentServiceError("max_web_results 必须在 1 到 10 之间")
+
+    if request_id:
+        existing = (
+            db.query(HistoryRecord)
+            .filter(
+                HistoryRecord.user_id == user_id,
+                HistoryRecord.record_id == request_id,
+                HistoryRecord.mode == "agent",
+            )
+            .first()
+        )
+        if existing is not None:
+            return {
+                "answer": existing.ai_output,
+                "route": "hybrid" if existing.used_web_search else "local",
+                "route_reason": existing.route_reason or "",
+                "execution_steps": json.loads(existing.execution_steps or "[]"),
+                "sources": json.loads(existing.sources or "[]"),
+                "web_sources": json.loads(existing.web_sources or "[]"),
+                "used_local_knowledge": True,
+                "used_web_search": bool(existing.used_web_search),
+                "history_record_id": existing.record_id,
+            }
 
     try:
         result = AGENT_GRAPH.invoke(
@@ -392,7 +416,7 @@ def ask_agent(
 
     record = HistoryRecord(
         user_id=user_id,
-        record_id=str(uuid4()),
+        record_id=request_id or str(uuid4()),
         mode="agent",
         user_input=cleaned_question,
         ai_output=answer,

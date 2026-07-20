@@ -6,6 +6,8 @@ from sqlalchemy.orm import Session
 from app.core.security import hash_password, validate_password
 from app.db.models import (
     AgentRun,
+    BackgroundJob,
+    BackgroundJobArtifact,
     FileRecord,
     HistoryRecord,
     ImprovementTask,
@@ -206,6 +208,8 @@ def _user_resource_counts(db: Session, user_id: int) -> dict:
         "improvement_tasks": ImprovementTask,
         "resume_project_descriptions": ResumeProjectDescription,
         "agent_runs": AgentRun,
+        "background_jobs": BackgroundJob,
+        "background_job_artifacts": BackgroundJobArtifact,
         "usage_events": UsageEvent,
     }
     return {

@@ -43,7 +43,19 @@ def generate_resume_project_description(
     session_id: int,
     target_job_id: int | None,
     project_file_ids: list[str] | None,
+    source_job_id: str | None = None,
 ) -> ResumeProjectDescription:
+    if source_job_id:
+        existing = (
+            db.query(ResumeProjectDescription)
+            .filter(
+                ResumeProjectDescription.user_id == user_id,
+                ResumeProjectDescription.source_job_id == source_job_id,
+            )
+            .first()
+        )
+        if existing is not None:
+            return existing
     interview_session = _get_completed_session(db, user_id, session_id)
     project_files = _get_project_files(
         db,
@@ -80,7 +92,7 @@ def generate_resume_project_description(
         db,
         user_id,
         "resume_generation",
-        f"resume-generation:{uuid4()}",
+        f"resume-generation:{source_job_id or uuid4()}",
         related_resource_type="interview_session",
         related_resource_id=interview_session.id,
     )
@@ -96,6 +108,7 @@ def generate_resume_project_description(
 
     now = now_iso()
     description = ResumeProjectDescription(
+        source_job_id=source_job_id,
         user_id=user_id,
         session_id=interview_session.id,
         target_job_id=target_job.id if target_job is not None else None,

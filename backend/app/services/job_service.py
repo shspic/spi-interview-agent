@@ -97,9 +97,30 @@ def analyze_job(
     user_id: int,
     db: Session,
     use_web_search: bool = False,
+    request_id: str | None = None,
 ) -> dict:
     if not job_description.strip():
         raise JobServiceError("岗位 JD 不能为空")
+
+    if request_id:
+        existing = (
+            db.query(HistoryRecord)
+            .filter(
+                HistoryRecord.user_id == user_id,
+                HistoryRecord.record_id == request_id,
+                HistoryRecord.mode == "job_analysis",
+            )
+            .first()
+        )
+        if existing is not None:
+            return {
+                "analysis": existing.ai_output,
+                "sources": json.loads(existing.sources or "[]"),
+                "used_local_knowledge": True,
+                "used_web_search": bool(existing.used_web_search),
+                "web_sources": json.loads(existing.web_sources or "[]"),
+                "history_record_id": existing.record_id,
+            }
 
     try:
         search_result = search_trusted_evidence(
@@ -140,7 +161,7 @@ def analyze_job(
 
     record = HistoryRecord(
         user_id=user_id,
-        record_id=str(uuid4()),
+        record_id=request_id or str(uuid4()),
         mode="job_analysis",
         user_input=job_description,
         ai_output=analysis,

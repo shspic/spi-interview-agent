@@ -72,6 +72,7 @@ class TargetJob(Base):
             "user_id",
             unique=True,
             sqlite_where=text("is_active = 1"),
+            postgresql_where=text("is_active IS TRUE"),
         ),
     )
 
@@ -102,6 +103,7 @@ class FileRecord(Base):
             "upload_idempotency_key_hash",
             unique=True,
             sqlite_where=text("upload_idempotency_key_hash IS NOT NULL"),
+            postgresql_where=text("upload_idempotency_key_hash IS NOT NULL"),
         ),
     )
 
@@ -421,6 +423,7 @@ class ImprovementTask(Base):
             "dedupe_key",
             unique=True,
             sqlite_where=text("dedupe_key IS NOT NULL"),
+            postgresql_where=text("dedupe_key IS NOT NULL"),
         ),
     )
 
@@ -504,6 +507,157 @@ class AgentRun(Base):
     session = relationship("InterviewSession", back_populates="agent_runs")
 
 
+class BackgroundJobArtifact(Base):
+    __tablename__ = "background_job_artifacts"
+    __table_args__ = (
+        Index("ix_background_job_artifacts_user_created", "user_id", "created_at"),
+        Index("ix_background_job_artifacts_expires_at", "expires_at"),
+    )
+
+    id = Column(Text, primary_key=True)
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    artifact_type = Column(Text, nullable=False)
+    input_data = Column(JSON, nullable=True)
+    result_data = Column(JSON, nullable=True)
+    created_at = Column(Text, nullable=False)
+    updated_at = Column(Text, nullable=False)
+    expires_at = Column(Text, nullable=False)
+
+
+class BackgroundJob(Base):
+    __tablename__ = "background_jobs"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "task_type",
+            "idempotency_key_hash",
+            name="uq_background_jobs_user_type_idempotency",
+        ),
+        CheckConstraint(
+            "task_type IN ('knowledge_rebuild', 'agent_ask', 'job_analysis', "
+            "'interview_start', 'interview_evaluation', "
+            "'improvement_generation', 'resume_generation', "
+            "'data_retention_cleanup')",
+            name="ck_background_jobs_task_type",
+        ),
+        CheckConstraint(
+            "status IN ('queued', 'running', 'succeeded', 'failed', "
+            "'cancel_requested', 'cancelled', 'timed_out', 'retry_wait')",
+            name="ck_background_jobs_status",
+        ),
+        CheckConstraint(
+            "progress_percent >= 0 AND progress_percent <= 100",
+            name="ck_background_jobs_progress",
+        ),
+        CheckConstraint(
+            "attempt_count >= 0 AND max_attempts > 0 "
+            "AND attempt_count <= max_attempts",
+            name="ck_background_jobs_attempts",
+        ),
+        CheckConstraint("timeout_seconds > 0", name="ck_background_jobs_timeout"),
+        Index("ix_background_jobs_status_available", "status", "available_at"),
+        Index("ix_background_jobs_status_lease", "status", "lease_expires_at"),
+        Index("ix_background_jobs_user_created", "user_id", "created_at"),
+    )
+
+    id = Column(Text, primary_key=True)
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    task_type = Column(Text, nullable=False, index=True)
+    status = Column(Text, nullable=False, default="queued", index=True)
+    progress_percent = Column(Integer, nullable=False, default=0)
+    phase = Column(Text, nullable=False, default="queued")
+    message_code = Column(Text, nullable=False, default="job_queued")
+    idempotency_key_hash = Column(Text, nullable=False)
+    input_reference = Column(Text, nullable=True)
+    created_at = Column(Text, nullable=False)
+    available_at = Column(Text, nullable=False)
+    started_at = Column(Text, nullable=True)
+    completed_at = Column(Text, nullable=True)
+    heartbeat_at = Column(Text, nullable=True)
+    lease_expires_at = Column(Text, nullable=True)
+    cancel_requested_at = Column(Text, nullable=True)
+    attempt_count = Column(Integer, nullable=False, default=0)
+    max_attempts = Column(Integer, nullable=False, default=3)
+    timeout_seconds = Column(Integer, nullable=False, default=900)
+    error_code = Column(Text, nullable=True)
+    error_summary = Column(Text, nullable=True)
+    result_reference = Column(Text, nullable=True)
+    quota_usage_type = Column(Text, nullable=True)
+    quota_event_id = Column(
+        Integer,
+        ForeignKey("usage_events.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    worker_id = Column(Text, nullable=True)
+
+    events = relationship(
+        "BackgroundJobEvent",
+        back_populates="job",
+        cascade="all, delete-orphan",
+        order_by="BackgroundJobEvent.id",
+    )
+
+
+class BackgroundJobEvent(Base):
+    __tablename__ = "background_job_events"
+    __table_args__ = (
+        Index("ix_background_job_events_job_created", "job_id", "created_at"),
+        Index("ix_background_job_events_user_created", "user_id", "created_at"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    job_id = Column(
+        Text,
+        ForeignKey("background_jobs.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    from_status = Column(Text, nullable=True)
+    to_status = Column(Text, nullable=False)
+    phase = Column(Text, nullable=False)
+    message_code = Column(Text, nullable=False)
+    attempt_count = Column(Integer, nullable=False)
+    created_at = Column(Text, nullable=False)
+
+    job = relationship("BackgroundJob", back_populates="events")
+
+
+class WorkerHeartbeat(Base):
+    __tablename__ = "worker_heartbeats"
+    __table_args__ = (Index("ix_worker_heartbeats_heartbeat_at", "heartbeat_at"),)
+
+    worker_id = Column(Text, primary_key=True)
+    database_dialect = Column(Text, nullable=False)
+    started_at = Column(Text, nullable=False)
+    heartbeat_at = Column(Text, nullable=False)
+    stopped_at = Column(Text, nullable=True)
+
+
+class MaintenanceState(Base):
+    __tablename__ = "maintenance_states"
+
+    key = Column(Text, primary_key=True)
+    last_run_at = Column(Text, nullable=True)
+    updated_at = Column(Text, nullable=False)
+
+
 class ResumeProjectDescription(Base):
     __tablename__ = "resume_project_descriptions"
     __table_args__ = (
@@ -520,6 +674,7 @@ class ResumeProjectDescription(Base):
     )
 
     id = Column(Integer, primary_key=True, index=True)
+    source_job_id = Column(Text, nullable=True, unique=True)
     user_id = Column(
         Integer,
         ForeignKey("users.id", ondelete="CASCADE"),

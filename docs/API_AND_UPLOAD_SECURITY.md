@@ -1,5 +1,7 @@
 # API 与上传安全边界
 
+上传配额在 SQLite 通过 `BEGIN IMMEDIATE` 串行，在 PostgreSQL 通过锁用户行串行；失败路径释放预留。后台任务 API 不返回 Worker ID、输入引用或完整异常，跨用户查询/取消按不存在处理，并使用 `Cache-Control: no-store`。
+
 > 浏览器认证已迁移为 HttpOnly Cookie、可轮换 Refresh Token、服务端 AuthSession 与会话绑定 CSRF；CORS 请求头不再允许浏览器 Bearer。详见 [认证与会话安全](AUTH_SESSION_SECURITY.md)。
 
 本文记录当前 FastAPI 后端在朋友试用阶段的安全边界。实现目标是限制不可信请求的资源消耗和数据访问范围，不等同于 WAF、恶意软件扫描或完整渗透测试。
