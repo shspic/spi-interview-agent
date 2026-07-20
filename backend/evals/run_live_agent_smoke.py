@@ -15,6 +15,7 @@ MAX_CASES = 5
 MAX_CALLS = 10
 MAX_ESTIMATED_TOKENS = 50_000
 AGENTS = {"all", "supervisor", "interviewer", "evaluation", "improvement", "resume"}
+LIVE_CONFIRMATION = "I_ACCEPT_LIVE_MODEL_COST"
 
 
 def parse_args() -> argparse.Namespace:
@@ -80,6 +81,16 @@ def require_live_gates(args: argparse.Namespace) -> None:
         missing.append("DEEPSEEK_API_KEY")
     if missing:
         raise SystemExit("真实调用已拒绝，缺少显式门禁：" + ", ".join(missing))
+
+
+def confirm_interactively(args: argparse.Namespace, cases: list[dict]) -> None:
+    budget = readiness(args, cases)
+    print(json.dumps(budget, ensure_ascii=False, indent=2))
+    confirmation = input(
+        f"真实调用可能产生费用。确认上限后输入 {LIVE_CONFIRMATION}："
+    ).strip()
+    if confirmation != LIVE_CONFIRMATION:
+        raise SystemExit("未收到精确人工确认，真实调用已取消")
 
 
 def run_live(args: argparse.Namespace, cases: list[dict]) -> dict:
@@ -157,12 +168,27 @@ def main() -> None:
     if args.check:
         print(json.dumps(readiness(args, cases), ensure_ascii=False, indent=2))
         return
+    require_live_gates(args)
+    confirm_interactively(args, cases)
     report = run_live(args, cases)
     report_dir = Path(__file__).with_name("results") / "live"
     report_dir.mkdir(parents=True, exist_ok=True)
     report_path = report_dir / "live-smoke-latest.json"
     report_path.write_text(
         json.dumps(report, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    review_path = report_dir / "live-smoke-human-review.md"
+    rows = "\n".join(
+        f"| {item['case_id']} | {item['agent']} | 待评 | 待评 | 待评 | 待评 | 待评 | 待评 | 通过 / 勉强 / 失败 | |"
+        for item in report["results"]
+    )
+    review_path.write_text(
+        "# Live Smoke 人工评分表\n\n"
+        "只记录人工判断，不据此自动修改 Prompt。\n\n"
+        "| Case | Agent | 问题自然度 | 追问合理性 | 评分公平性 | 证据忠实度 | 优化答案自然度 | Resume 是否夸大 | 结论 | 备注 |\n"
+        "|---|---|---|---|---|---|---|---|---|---|\n"
+        f"{rows}\n",
         encoding="utf-8",
     )
     print(json.dumps({"report": str(report_path.name), **report}, ensure_ascii=False))

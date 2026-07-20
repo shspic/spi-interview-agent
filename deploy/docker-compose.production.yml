@@ -1,0 +1,40 @@
+services:
+  migrate:
+    environment:
+      APP_ENVIRONMENT: production
+      AUTH_COOKIE_SECURE: "true"
+      AUTH_COOKIE_SAMESITE: lax
+      AUTH_COOKIE_DOMAIN: ""
+      AUTH_REQUIRE_ORIGIN_CHECK: "true"
+      CORS_ALLOWED_ORIGINS: ${APP_PUBLIC_ORIGIN:?请设置 APP_PUBLIC_ORIGIN}
+      APP_TRUSTED_PROXY_CIDRS: 172.30.0.0/24
+      ENABLE_LEGACY_SCHEMA_PATCHES: "false"
+      ENABLE_SYNC_LONG_TASK_COMPAT: "false"
+  backend:
+    environment:
+      APP_ENVIRONMENT: production
+      AUTH_COOKIE_SECURE: "true"
+      AUTH_COOKIE_SAMESITE: lax
+      AUTH_COOKIE_DOMAIN: ""
+      AUTH_REQUIRE_ORIGIN_CHECK: "true"
+      CORS_ALLOWED_ORIGINS: ${APP_PUBLIC_ORIGIN:?请设置 APP_PUBLIC_ORIGIN}
+      APP_TRUSTED_PROXY_CIDRS: 172.30.0.0/24
+      ENABLE_LEGACY_SCHEMA_PATCHES: "false"
+      ENABLE_SYNC_LONG_TASK_COMPAT: "false"
+  worker:
+    environment:
+      APP_ENVIRONMENT: production
+      AUTH_COOKIE_SECURE: "true"
+      AUTH_COOKIE_SAMESITE: lax
+      AUTH_COOKIE_DOMAIN: ""
+      AUTH_REQUIRE_ORIGIN_CHECK: "true"
+      CORS_ALLOWED_ORIGINS: ${APP_PUBLIC_ORIGIN:?请设置 APP_PUBLIC_ORIGIN}
+      APP_TRUSTED_PROXY_CIDRS: 172.30.0.0/24
+      ENABLE_LEGACY_SCHEMA_PATCHES: "false"
+      ENABLE_SYNC_LONG_TASK_COMPAT: "false"
+
+networks:
+  internal:
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24

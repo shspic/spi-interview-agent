@@ -1,6 +1,13 @@
 import axios from "axios";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+const configuredApiBaseUrl = import.meta.env.VITE_API_BASE_URL;
+
+const API_BASE_URL =
+  configuredApiBaseUrl !== undefined
+    ? configuredApiBaseUrl.trim()
+    : import.meta.env.DEV
+      ? "http://localhost:8000"
+      : "";
 const CSRF_COOKIE_NAME = import.meta.env.VITE_AUTH_CSRF_COOKIE_NAME || "spi_csrf";
 const SAFE_METHODS = new Set(["get", "head", "options"]);
 const AUTH_ENDPOINTS = new Set([
@@ -109,7 +116,10 @@ apiClient.interceptors.response.use(
   async (error) => {
     const config = error.config || {};
     const method = (config.method || "get").toLowerCase();
-    const endpoint = new URL(config.url || "", API_BASE_URL).pathname;
+    const endpoint = new URL(
+      config.url || "",
+      API_BASE_URL || window.location.origin,
+    ).pathname;
     const errorCode = error.response?.data?.error_code;
     const csrfError =
       error.response?.status === 403 &&

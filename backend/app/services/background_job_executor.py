@@ -16,8 +16,7 @@ from app.services.background_job_service import (
 )
 from app.services.data_retention_service import cleanup_expired_data
 from app.services.improvement_generation_service import generate_improvements_for_session
-from app.services.interview_flow_service import start_interview_flow
-from app.services.interview_service import evaluate_interview_answer
+from app.services.interview_flow_service import answer_interview_turn, start_interview_flow
 from app.services.job_service import analyze_job
 from app.services.resume_generation_service import generate_resume_project_description
 from app.services.vector_store import rebuild_vector_store
@@ -146,18 +145,22 @@ def execute_background_job(
 
     if job.task_type == "interview_evaluation":
         _checkpoint(db, job, worker_id, 20, "evaluating", "interview_evaluating")
-        result = evaluate_interview_answer(
-            interview_type=str(payload["interview_type"]),
-            job_description=str(payload["job_description"]),
-            question_index=int(payload["question_index"]),
-            question=str(payload["question"]),
-            user_answer=str(payload["user_answer"]),
-            user_id=job.user_id,
-            db=db,
-            request_id=job.id,
+        result = answer_interview_turn(
+            db,
+            job.user_id,
+            int(payload["session_id"]),
+            int(payload["turn_id"]),
+            str(payload["answer"]),
         )
         _checkpoint(db, job, worker_id, 90, "saving", "interview_evaluation_saved")
-        return result
+        return {
+            "session_id": result.interview_session.id,
+            "answered_turn_id": result.answered_turn.id,
+            "next_turn_id": result.next_turn.id if result.next_turn is not None else None,
+            "is_completed": result.interview_session.status == "completed",
+            "decision": result.decision.model_dump(mode="json"),
+            "evidence_limited": result.evidence_limited,
+        }
 
     if job.task_type == "improvement_generation":
         _checkpoint(db, job, worker_id, 20, "evaluating", "improvement_evaluating")

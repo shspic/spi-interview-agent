@@ -12,14 +12,6 @@ export async function getResumeDescription(descriptionId) {
   return response.data;
 }
 
-export async function generateResumeDescription(payload) {
-  const response = await apiClient.post(
-    "/api/resume-project-descriptions/generate",
-    payload,
-  );
-  return response.data;
-}
-
 export async function deleteResumeDescription(descriptionId) {
   const response = await apiClient.delete(
     `/api/resume-project-descriptions/${descriptionId}`,

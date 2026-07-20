@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy.orm import Session
 
@@ -15,6 +15,7 @@ from app.services.vector_store import (
     rebuild_vector_store,
     search_similar_chunks,
 )
+from app.api.deprecation import enforce_sync_long_task_policy
 
 router = APIRouter()
 
@@ -163,11 +164,14 @@ def preview_chunks(
     "/knowledge/rebuild",
     summary="重建知识库索引",
     description="读取所有已上传文件，解析文本、切分 chunks、生成向量，并写入 ChromaDB。",
+    deprecated=True,
 )
 def rebuild_knowledge(
+    response: Response,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    enforce_sync_long_task_policy(response, "/api/tasks/knowledge-rebuild")
     return rebuild_vector_store(db, current_user.id)
 
 

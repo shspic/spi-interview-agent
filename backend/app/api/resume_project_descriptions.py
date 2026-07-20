@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.security import get_current_user
@@ -16,6 +16,7 @@ from app.services.resume_generation_service import (
     get_owned_resume_project_description,
     list_resume_project_descriptions,
 )
+from app.api.deprecation import enforce_sync_long_task_policy
 
 router = APIRouter()
 
@@ -50,12 +51,15 @@ def description_to_response(
     "/resume-project-descriptions/generate",
     response_model=ResumeProjectDescriptionResponse,
     status_code=status.HTTP_201_CREATED,
+    deprecated=True,
 )
 def generate_description(
     request: ResumeProjectDescriptionGenerateRequest,
+    response: Response,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    enforce_sync_long_task_policy(response, "/api/tasks/resume")
     try:
         description = generate_resume_project_description(
             db,

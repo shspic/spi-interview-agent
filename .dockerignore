@@ -2,7 +2,10 @@
 .gitignore
 **/.env
 **/*.env
+**/.env.*
+**/*.env.*
 !backend/.env.example
+!deploy/.env.production.example
 **/__pycache__
 **/*.py[cod]
 **/.pytest_cache

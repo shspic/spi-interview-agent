@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.db.models import (
     AgentRun,
+    AdminAuditLog,
     BackgroundJob,
     BackgroundJobArtifact,
     FileRecord,
@@ -14,6 +15,7 @@ from app.db.models import (
     InterviewSession,
     InterviewTurn,
     ResumeProjectDescription,
+    User,
     UserDataDeletionLog,
 )
 from app.services.vector_store import delete_user_vectors
@@ -23,6 +25,7 @@ from app.services.upload_security import (
 )
 
 USER_DATA_CLEANUP_CONFIRMATION = "DELETE_MY_DATA"
+ACCOUNT_DELETE_CONFIRMATION = "DELETE_MY_ACCOUNT"
 RETAINED_RESOURCES = [
     "user",
     "user_profile",
@@ -204,4 +207,33 @@ def cleanup_user_business_data(db: Session, user_id: int) -> dict:
         "deleted_counts": counts,
         "failed_items": [],
         "retained_resources": RETAINED_RESOURCES,
+    }
+
+
+def delete_own_account(db: Session, user: User) -> dict:
+    """删除当前用户及其数据；文件或向量清理失败时保留账号。"""
+    result = cleanup_user_business_data(db, user.id)
+    if not result["success"]:
+        return result
+
+    user_id = user.id
+    db.add(
+        AdminAuditLog(
+            admin_user_id=user_id,
+            action="delete_own_account",
+            target_user_id=user_id,
+            resource_type="user",
+            resource_id=str(user_id),
+            status="success",
+            detail_summary="用户主动删除账号及关联数据",
+            created_at=datetime.now().isoformat(timespec="seconds"),
+        )
+    )
+    db.flush()
+    db.delete(user)
+    db.commit()
+    return {
+        "success": True,
+        "deleted_counts": {"users": 1, **result["deleted_counts"]},
+        "failed_items": [],
     }

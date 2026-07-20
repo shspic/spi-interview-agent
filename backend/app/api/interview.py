@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
@@ -12,6 +12,7 @@ from app.services.interview_service import (
     evaluate_interview_answer,
     generate_interview_question,
 )
+from app.api.deprecation import enforce_sync_long_task_policy
 
 router = APIRouter()
 
@@ -84,12 +85,15 @@ class InterviewEvaluateRequest(BaseModel):
     "/interview/question",
     summary="生成模拟面试题",
     description="结合岗位 JD 和本地知识库，生成一条模拟面试题。",
+    deprecated=True,
 )
 def generate_question_api(
     request: InterviewQuestionRequest,
+    response: Response,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    enforce_sync_long_task_policy(response, "/api/tasks/interview-start")
     try:
         return generate_interview_question(
             interview_type=request.interview_type,
@@ -106,12 +110,15 @@ def generate_question_api(
     "/interview/evaluate",
     summary="评价模拟面试回答",
     description="结合岗位 JD、本地知识库和用户回答，对模拟面试回答进行评分和改进建议。",
+    deprecated=True,
 )
 def evaluate_answer_api(
     request: InterviewEvaluateRequest,
+    response: Response,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    enforce_sync_long_task_policy(response, "/api/tasks/interview-evaluation")
     try:
         return evaluate_interview_answer(
             interview_type=request.interview_type,

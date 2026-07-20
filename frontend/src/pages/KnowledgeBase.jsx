@@ -1,8 +1,13 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import apiClient from "../api/client";
 import { getFriendlyErrorMessage } from "../utils/errorMessage";
 import useBackgroundJob from "../hooks/useBackgroundJob";
+import BackgroundJobCard from "../components/BackgroundJobCard";
+import { formatDateTime } from "../utils/format";
+
+const MAX_FILE_BYTES = 20 * 1024 * 1024;
+const statusLabels = { uploaded: "待索引", indexed: "已索引", failed: "索引失败", processing: "处理中" };
 
 function KnowledgeBase() {
   const [files, setFiles] = useState([]);
@@ -11,6 +16,12 @@ function KnowledgeBase() {
   const [selectedCategory, setSelectedCategory] = useState("other");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [dragActive, setDragActive] = useState(false);
+  const [query, setQuery] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const fileInputRef = useRef(null);
 
   const fetchFiles = useCallback(async () => {
     try {
@@ -66,17 +77,27 @@ function KnowledgeBase() {
     return () => window.clearTimeout(timerId);
   }, [refreshAll]);
 
-  const handleFileChange = (event) => {
-    const file = event.target.files?.[0];
-
+  const selectFile = (file) => {
     if (!file) {
       setSelectedFile(null);
       return;
     }
-
+    const extension = file.name.toLowerCase().slice(file.name.lastIndexOf("."));
+    if (![".md", ".txt", ".pdf"].includes(extension)) {
+      setSelectedFile(null);
+      setMessage("文件类型不受支持。仅可上传 PDF、TXT 或 MD。");
+      return;
+    }
+    if (file.size > MAX_FILE_BYTES) {
+      setSelectedFile(null);
+      setMessage("文件超过 20 MB 单文件上限，请压缩或拆分后重试。");
+      return;
+    }
     setSelectedFile(file);
     setMessage("");
   };
+
+  const handleFileChange = (event) => selectFile(event.target.files?.[0]);
 
   const handleUpload = async () => {
     if (!selectedFile) {
@@ -99,21 +120,22 @@ function KnowledgeBase() {
 
     try {
       setLoading(true);
+      setUploadProgress(0);
       setMessage("正在上传文件...");
 
       await apiClient.post("/api/files/upload", formData, {
         headers: {
           "Content-Type": "multipart/form-data",
         },
+        onUploadProgress: (event) => {
+          if (event.total) setUploadProgress(Math.round((event.loaded / event.total) * 100));
+        },
       });
 
       setSelectedFile(null);
       setMessage("文件上传成功。请点击“重建知识库索引”，让新文件进入 RAG 检索。");
 
-      const fileInput = document.getElementById("file-input");
-      if (fileInput) {
-        fileInput.value = "";
-      }
+      if (fileInputRef.current) fileInputRef.current.value = "";
 
       await fetchFiles();
       await fetchKnowledgeStatus();
@@ -123,6 +145,22 @@ function KnowledgeBase() {
       setMessage(getFriendlyErrorMessage(error, "文件上传失败。"));
     } finally {
       setLoading(false);
+      setUploadProgress(0);
+    }
+  };
+
+  const handleSearch = async (event) => {
+    event.preventDefault();
+    if (!query.trim()) return;
+    setSearching(true);
+    setMessage("");
+    try {
+      const response = await apiClient.post("/api/knowledge/search", { query: query.trim(), top_k: 5 });
+      setSearchResults(response.data.results || response.data.chunks || []);
+    } catch (error) {
+      setMessage(getFriendlyErrorMessage(error, "知识库近似搜索失败。"));
+    } finally {
+      setSearching(false);
     }
   };
 
@@ -183,19 +221,23 @@ function KnowledgeBase() {
   return (
     <section>
       <h1>知识库管理</h1>
-      <p>
-        上传 Markdown、TXT 或 PDF 文件，并重建知识库索引。索引完成后，这些资料会用于
-        RAG 自由问答、岗位分析、模拟面试和 LangGraph Agent。
-      </p>
+      <p>上传 PDF、TXT 或 MD 文件并建立索引，供面试 Agent 在当前账号范围内查找相关资料。</p>
 
-      <div className="upload-panel">
+      <div className="upload-limits" aria-label="上传限制">
+        <span>支持 PDF / TXT / MD</span><span>单文件最多 20 MB</span><span>账号总存储最多 200 MB</span>
+      </div>
+
+      <div className={`upload-panel drop-zone${dragActive ? " is-dragging" : ""}`} onDragOver={(event) => { event.preventDefault(); setDragActive(true); }} onDragLeave={() => setDragActive(false)} onDrop={(event) => { event.preventDefault(); setDragActive(false); selectFile(event.dataTransfer.files?.[0]); }}>
         <input
           id="file-input"
+          ref={fileInputRef}
           type="file"
           accept=".md,.txt,.pdf"
           onChange={handleFileChange}
           disabled={busy}
         />
+
+        <button type="button" className="secondary-button" onClick={() => fileInputRef.current?.click()} disabled={busy}>选择文件</button>
 
         <select
           value={selectedCategory}
@@ -214,9 +256,10 @@ function KnowledgeBase() {
 
       {selectedFile && (
         <p className="hint-text">
-          已选择文件：<strong>{selectedFile.name}</strong>
+          已选择：<strong>{selectedFile.name}</strong>（{(selectedFile.size / 1024 / 1024).toFixed(2)} MB）
         </p>
       )}
+      {uploadProgress > 0 && <div className="job-progress" aria-label={`上传进度 ${uploadProgress}%`}><span style={{ width: `${uploadProgress}%` }} /></div>}
 
       <div className="chat-actions">
         <button type="button" onClick={refreshAll} disabled={busy}>
@@ -234,18 +277,13 @@ function KnowledgeBase() {
 
       {message && <p className="message-text">{message}</p>}
 
-      {job && (
-        <div className="status-box">
-          <p>任务状态：{job.status}</p>
-          <p>阶段：{job.phase}</p>
-          <p>进度：{job.progress_percent}%</p>
-          {isRunning && (
-            <button type="button" className="secondary-button" onClick={cancelJob}>
-              取消任务
-            </button>
-          )}
-        </div>
-      )}
+      {job && <BackgroundJobCard job={job} onCancel={isRunning ? cancelJob : undefined} onRetry={job.status === "failed" || job.status === "timed_out" ? handleRebuildKnowledge : undefined} />}
+
+      <form className="knowledge-search" onSubmit={handleSearch}>
+        <div><label htmlFor="knowledge-query">在我的资料中近似搜索</label><p>结果按语义相关性展示，仅用于查找资料，不代表 Agent 已采纳为回答证据。</p></div>
+        <div><input id="knowledge-query" value={query} onChange={(event) => setQuery(event.target.value)} maxLength={6000} placeholder="例如：项目中如何处理并发任务？" /><button type="submit" disabled={searching}>{searching ? "搜索中..." : "搜索"}</button></div>
+      </form>
+      {searchResults.length > 0 && <div className="search-result-list">{searchResults.map((item, index) => <article key={`${item.file_id || item.filename}-${index}`}><strong>{item.filename || "资料片段"}</strong><p>{item.text || item.content || "无预览内容"}</p></article>)}</div>}
 
       {knowledgeStatus && (
         <div className="status-box">
@@ -289,7 +327,7 @@ function KnowledgeBase() {
       {files.length === 0 ? (
         <p className="empty-text">暂无上传文件。</p>
       ) : (
-        <table className="file-table">
+        <div className="table-scroll"><table className="file-table">
           <thead>
             <tr>
               <th>文件名</th>
@@ -313,8 +351,8 @@ function KnowledgeBase() {
                       ? "项目资料"
                       : "其他"}
                 </td>
-                <td>{file.status}</td>
-                <td>{file.created_at}</td>
+                <td><span className={`status-badge ${file.status}`}>{statusLabels[file.status] || "状态未知"}</span></td>
+                <td>{formatDateTime(file.created_at)}</td>
                 <td>
                   <button
                     type="button"
@@ -328,7 +366,7 @@ function KnowledgeBase() {
               </tr>
             ))}
           </tbody>
-        </table>
+        </table></div>
       )}
     </section>
   );

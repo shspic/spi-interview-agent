@@ -121,7 +121,6 @@ function ResumeDescriptionPanel({
               <ListBlock title="解决方案" items={selectedDescription.solutions} />
               <ListBlock title="项目成果" items={selectedDescription.outcomes} />
               <ListBlock title="面试讲解要点" items={selectedDescription.interview_talking_points} />
-              <ListBlock title="证据来源 ID" items={selectedDescription.evidence_source_ids} />
             </>
           )}
         </div>

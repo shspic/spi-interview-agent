@@ -4,6 +4,7 @@ from app.core.config import settings
 from app.core.security import hash_password
 from auth_test_utils import session_headers
 from app.db.models import (
+    AdminAuditLog,
     DailyUsageCounter,
     FileRecord,
     HistoryRecord,
@@ -302,3 +303,48 @@ def test_cleanup_rejects_bad_credentials_and_reports_vector_failure(
         user_id=user.id,
         status="failed",
     ).count() == 3
+
+
+def test_user_can_delete_own_account_with_explicit_confirmation(
+    client,
+    db_session,
+    monkeypatch,
+):
+    user = add_user(db_session, "delete_self")
+    user_id = user.id
+    monkeypatch.setattr(account_data_service, "delete_user_vectors", lambda _user_id: None)
+
+    rejected = client.request(
+        "DELETE",
+        "/api/account",
+        headers=auth_headers(db_session, user),
+        json={
+            "current_password": OLD_PASSWORD,
+            "confirm_username": user.username,
+            "confirm": "wrong",
+        },
+    )
+    assert rejected.status_code == 422
+    assert db_session.get(User, user_id) is not None
+
+    response = client.request(
+        "DELETE",
+        "/api/account",
+        headers=auth_headers(db_session, user),
+        json={
+            "current_password": OLD_PASSWORD,
+            "confirm_username": user.username,
+            "confirm": "DELETE_MY_ACCOUNT",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["success"] is True
+    db_session.expire_all()
+    assert db_session.get(User, user_id) is None
+    audit = db_session.query(AdminAuditLog).filter_by(
+        action="delete_own_account",
+        resource_id=str(user_id),
+    ).one()
+    assert audit.admin_user_id is None
+    assert audit.target_user_id is None

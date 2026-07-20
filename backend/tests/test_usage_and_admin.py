@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -9,12 +9,14 @@ from app.core.security import hash_password, verify_password
 from auth_test_utils import session_headers
 from app.db.models import (
     AdminAuditLog,
+    BackgroundJob,
     DailyUsageCounter,
     FileRecord,
     HistoryRecord,
     RegistrationSetting,
     UsageEvent,
     User,
+    WorkerHeartbeat,
 )
 from app.services import admin_service
 from app.services.usage_service import (
@@ -498,3 +500,63 @@ def test_delete_user_reports_vector_failure_without_claiming_success(
     assert response.json()["failed_items"][0]["resource_type"] == "vector"
     assert db_session.get(User, target.id) is not None
     assert file_path.exists()
+
+
+def test_admin_can_read_sanitized_background_jobs_and_worker_status(
+    client,
+    db_session,
+):
+    admin = add_user(db_session, "jobs_admin", is_admin=True)
+    user = add_user(db_session, "jobs_user")
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+    db_session.add_all(
+        [
+            BackgroundJob(
+                id="job-admin-report",
+                user_id=user.id,
+                task_type="agent_ask",
+                status="running",
+                progress_percent=45,
+                phase="executing",
+                message_code="job_running",
+                idempotency_key_hash="hidden-hash",
+                created_at=now,
+                available_at=now,
+                heartbeat_at=now,
+                lease_expires_at=now,
+                attempt_count=1,
+                max_attempts=3,
+                timeout_seconds=900,
+                worker_id="secret-worker-id",
+            ),
+            WorkerHeartbeat(
+                worker_id="secret-worker-id",
+                database_dialect="sqlite",
+                started_at=now,
+                heartbeat_at=now,
+                stopped_at=None,
+            ),
+        ]
+    )
+    db_session.commit()
+
+    jobs = client.get(
+        "/api/admin/background-jobs",
+        headers=auth_headers(db_session, admin),
+    )
+    workers = client.get(
+        "/api/admin/workers",
+        headers=auth_headers(db_session, admin),
+    )
+
+    assert jobs.status_code == 200
+    item = jobs.json()["items"][0]
+    assert item["id"] == "job-admin-report"
+    assert "worker_id" not in item
+    assert "lease_expires_at" not in item
+    assert "idempotency_key_hash" not in item
+    assert workers.status_code == 200
+    assert workers.json()["online_count"] == 1
+    assert workers.json()["workers"][0]["label"] == "Worker 1"
+    assert "worker_id" not in workers.json()["workers"][0]
+    assert "secret-worker-id" not in workers.text

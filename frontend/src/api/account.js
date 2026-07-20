@@ -19,3 +19,8 @@ export async function cleanupMyBusinessData(payload) {
   const response = await apiClient.post("/api/account/data-cleanup", payload);
   return response.data;
 }
+
+export async function deleteMyAccount(payload) {
+  const response = await apiClient.delete("/api/account", { data: payload });
+  return response.data;
+}

@@ -1,12 +1,14 @@
 import { useCallback, useMemo, useState } from "react";
 
 import AdminOperations from "../components/admin/AdminOperations";
+import AdminJobs from "../components/admin/AdminJobs";
 import AdminRecords from "../components/admin/AdminRecords";
 import AdminUsage from "../components/admin/AdminUsage";
 import AdminUsers from "../components/admin/AdminUsers";
 import { useAuth } from "../auth/authContext";
 
 const tabs = [
+  ["jobs", "后台任务与 Worker"],
   ["overview", "概览"], ["users", "用户管理"], ["usage", "用量统计"],
   ["runs", "Agent 运行记录"], ["invite", "邀请码设置"], ["cleanup", "数据清理"], ["audit", "审计日志"],
 ];
@@ -46,6 +48,7 @@ function AdminDashboard({ onBack }) {
     {activeTab === "invite" && <AdminOperations kind="invite" refreshKey={refreshKey} onForbidden={onForbidden} onCompleted={() => setRefreshKey((v) => v + 1)} />}
     {activeTab === "cleanup" && <AdminOperations kind="cleanup" refreshKey={refreshKey} onForbidden={onForbidden} />}
     {activeTab === "audit" && <AdminRecords kind="audit" dateRange={stableDateRange} refreshKey={refreshKey} onForbidden={onForbidden} />}
+    {activeTab === "jobs" && <AdminJobs refreshKey={refreshKey} onForbidden={onForbidden} />}
   </section>;
 }
 

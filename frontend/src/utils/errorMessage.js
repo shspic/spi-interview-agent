@@ -3,9 +3,15 @@ export function getFriendlyErrorMessage(error, fallbackMessage = "请求失败�
   const status = error.response?.status;
   const code = error.code;
   const message = error.message;
+  const requestId = error.response?.headers?.["x-request-id"] || error.response?.data?.request_id;
+  const attachRequestId = (text) => requestId ? `${text}（请求编号：${requestId}）` : text;
+
+  if (status === 413) return attachRequestId("文件超过允许大小，请选择不超过 20 MB 的文件。");
+  if (status === 415) return attachRequestId("文件类型不受支持，仅可上传 PDF、TXT 或 MD。");
+  if (status >= 500) return attachRequestId("服务暂时无法完成请求，请稍后重试。");
 
   if (typeof detail === "string") {
-    return detail;
+    return attachRequestId(detail);
   }
 
   if (Array.isArray(detail)) {
@@ -13,7 +19,7 @@ export function getFriendlyErrorMessage(error, fallbackMessage = "请求失败�
       .map((item) => item?.msg)
       .filter(Boolean);
     return messages.length
-      ? `输入内容不符合要求：${messages.join("；")}`
+      ? attachRequestId(`输入内容不符合要求：${messages.join("；")}`)
       : "请求内容不符合后端校验要求。";
   }
 
@@ -30,9 +36,9 @@ export function getFriendlyErrorMessage(error, fallbackMessage = "请求失败�
       if (detail.reset_at) {
         usage.push(`重置时间 ${detail.reset_at}`);
       }
-      return usage.length ? `${detailMessage}（${usage.join("，")}）` : detailMessage;
+      return attachRequestId(usage.length ? `${detailMessage}（${usage.join("，")}）` : detailMessage);
     }
-    return detailMessage;
+    return attachRequestId(detailMessage);
   }
 
   if (code === "ECONNABORTED") {
@@ -40,7 +46,7 @@ export function getFriendlyErrorMessage(error, fallbackMessage = "请求失败�
   }
 
   if (!status && message === "Network Error") {
-    return "无法连接后端服务。请确认 FastAPI 后端已经启动，并检查地址是否为 http://127.0.0.1:8000。";
+    return "无法连接服务，请检查网络或在系统状态页确认服务是否可用。";
   }
 
   if (status === 400) {
@@ -71,9 +77,5 @@ export function getFriendlyErrorMessage(error, fallbackMessage = "请求失败�
     return "请求格式不符合后端接口要求，请检查字段名和数据类型。";
   }
 
-  if (status >= 500) {
-    return "后端服务内部错误，请查看后端终端日志。";
-  }
-
-  return fallbackMessage;
+  return attachRequestId(fallbackMessage);
 }

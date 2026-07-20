@@ -1,6 +1,6 @@
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
@@ -10,6 +10,7 @@ from app.core.input_validation import validate_safe_text
 from app.db.database import get_db
 from app.db.models import User
 from app.services.agent_service import AgentServiceError, ask_agent
+from app.api.deprecation import enforce_sync_long_task_policy
 
 router = APIRouter()
 
@@ -35,12 +36,15 @@ class AgentAskRequest(BaseModel):
     "/agent/ask",
     summary="LangGraph Agent 问答",
     description="基于 LangGraph 的 Agent 接口，可在本地知识库、联网搜索、混合模式之间进行路由。",
+    deprecated=True,
 )
 def ask_agent_api(
     request: AgentAskRequest,
+    response: Response,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    enforce_sync_long_task_policy(response, "/api/tasks/agent-ask")
     try:
         return ask_agent(
             question=request.question,

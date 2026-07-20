@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import apiClient from "../api/client";
 import {
-  answerInterviewQuestion,
   cancelInterviewSession,
   createInterviewSession,
   createRetrySession,
@@ -23,6 +22,7 @@ import ImprovementTaskList from "../components/interview/ImprovementTaskList";
 import InterviewSetup from "../components/interview/InterviewSetup";
 import InterviewWorkspace from "../components/interview/InterviewWorkspace";
 import ResumeDescriptionPanel from "../components/interview/ResumeDescriptionPanel";
+import BackgroundJobCard from "../components/BackgroundJobCard";
 import { getFriendlyErrorMessage } from "../utils/errorMessage";
 import useBackgroundJob from "../hooks/useBackgroundJob";
 
@@ -163,6 +163,21 @@ function InterviewAgent({ onOpenProfile, onOpenKnowledge, requestedSessionId }) 
     await refreshSessions();
     setMessage("面试会话已启动。");
   });
+  const evaluationTask = useBackgroundJob("interview-evaluation", async (result) => {
+    const detail = await loadSession(result.session_id, result.is_completed ? "result" : "interview");
+    if (!result.is_completed) {
+      const answeredTurn = detail.turns?.find((turn) => turn.id === result.answered_turn_id);
+      if (answeredTurn) {
+        setLatestResult({
+          answered_turn: answeredTurn,
+          decision: result.decision,
+          is_completed: false,
+        });
+      }
+    }
+    await refreshSessions();
+    setMessage(result.is_completed ? "本轮面试已完成。" : "回答评价已完成。");
+  });
   const improvementTask = useBackgroundJob("interview-improvement", async (result) => {
     await loadSession(result.session_id, "tasks");
     await refreshSessions();
@@ -178,11 +193,9 @@ function InterviewAgent({ onOpenProfile, onOpenKnowledge, requestedSessionId }) 
     setMessage("简历项目描述已生成并保存为新版本。");
   });
   const backgroundRunning =
-    startTask.isRunning || improvementTask.isRunning || resumeTask.isRunning;
+    startTask.isRunning || evaluationTask.isRunning || improvementTask.isRunning || resumeTask.isRunning;
   const pageBusy = Boolean(busyAction) || backgroundRunning;
-  const activeBackgroundTask = [startTask, improvementTask, resumeTask].find(
-    (item) => item.isRunning,
-  );
+  const pageTasks = [startTask, evaluationTask, improvementTask, resumeTask].filter((item) => item.job);
 
   const runStart = async (sessionId) => {
     setBusyAction("start");
@@ -218,13 +231,14 @@ function InterviewAgent({ onOpenProfile, onOpenKnowledge, requestedSessionId }) 
   };
 
   const handleAnswer = async (turnId, answer) => {
-    setBusyAction("answer");
     setMessage("");
     try {
-      const result = await answerInterviewQuestion(session.id, turnId, answer);
-      setSession((current) => ({ ...current, ...result }));
-      setLatestResult(result);
-      await refreshSessions();
+      await evaluationTask.createJob(
+        "/api/tasks/interview-evaluation",
+        { session_id: session.id, turn_id: turnId, answer },
+        `interview-evaluation-${session.id}-${turnId}`,
+      );
+      setMessage("回答已保存，评价任务已进入后台队列。");
     } catch (error) {
       try {
         const detail = await loadSession(session.id, "interview");
@@ -237,8 +251,6 @@ function InterviewAgent({ onOpenProfile, onOpenKnowledge, requestedSessionId }) 
       } catch {
         setMessage(getFriendlyErrorMessage(error, "提交回答失败。"));
       }
-    } finally {
-      setBusyAction("");
     }
   };
 
@@ -495,12 +507,9 @@ function InterviewAgent({ onOpenProfile, onOpenKnowledge, requestedSessionId }) 
         <button type="button" className="secondary-button" onClick={loadInitialData} disabled={pageBusy}>刷新数据</button>
       </div>
       {message && <div className="workspace-message" role="status">{message}<button type="button" aria-label="关闭提示" onClick={() => setMessage("")}>×</button></div>}
-      {activeBackgroundTask?.job && (
-        <div className="status-box">
-          <p>后台任务：{activeBackgroundTask.job.task_type}</p>
-          <p>阶段：{activeBackgroundTask.job.phase}</p>
-          <p>进度：{activeBackgroundTask.job.progress_percent}%</p>
-          <button type="button" className="secondary-button" onClick={activeBackgroundTask.cancelJob}>取消任务</button>
+      {pageTasks.length > 0 && (
+        <div className="page-job-list">
+          {pageTasks.map((item) => <BackgroundJobCard key={item.job.task_id} job={item.job} onCancel={item.cancelJob} />)}
         </div>
       )}
 

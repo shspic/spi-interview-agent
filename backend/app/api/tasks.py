@@ -70,42 +70,18 @@ class ResumeJobRequest(SessionJobRequest):
 
 class InterviewEvaluationJobRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    interview_type: str
-    job_description: str
-    question_index: int = Field(default=1, ge=1)
-    question: str
-    user_answer: str
+    session_id: int = Field(gt=0)
+    turn_id: int = Field(gt=0)
+    answer: str
 
-    @field_validator("interview_type")
-    @classmethod
-    def validate_type(cls, value: str) -> str:
-        return validate_safe_text(value, field_name="面试类型", max_chars=200)
-
-    @field_validator("job_description")
-    @classmethod
-    def validate_jd(cls, value: str) -> str:
-        return validate_safe_text(
-            value,
-            field_name="岗位描述",
-            max_chars=settings.max_job_description_chars,
-        )
-
-    @field_validator("question")
-    @classmethod
-    def validate_question(cls, value: str) -> str:
-        return validate_safe_text(
-            value,
-            field_name="面试问题",
-            max_chars=settings.max_chat_input_chars,
-        )
-
-    @field_validator("user_answer")
+    @field_validator("answer")
     @classmethod
     def validate_answer(cls, value: str) -> str:
         return validate_safe_text(
             value,
             field_name="面试回答",
             max_chars=settings.max_interview_answer_chars,
+            strip=True,
         )
 
 
@@ -221,7 +197,6 @@ def create_interview_evaluation_job(
             task_type="interview_evaluation",
             idempotency_key=idempotency_key or "",
             input_data=request.model_dump(),
-            quota_usage_type="interview_evaluation",
         )
     except (BackgroundJobError, UsageServiceError) as error:
         _raise_job_error(error)

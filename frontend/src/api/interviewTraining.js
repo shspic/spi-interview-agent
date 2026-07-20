@@ -15,21 +15,6 @@ export async function createInterviewSession(payload) {
   return response.data;
 }
 
-export async function startInterviewSession(sessionId) {
-  const response = await apiClient.post(
-    `/api/interview-sessions/${sessionId}/start`,
-  );
-  return response.data;
-}
-
-export async function answerInterviewQuestion(sessionId, turnId, answer) {
-  const response = await apiClient.post(
-    `/api/interview-sessions/${sessionId}/answer`,
-    { turn_id: turnId, answer },
-  );
-  return response.data;
-}
-
 export async function cancelInterviewSession(sessionId) {
   const response = await apiClient.post(
     `/api/interview-sessions/${sessionId}/cancel`,
@@ -40,13 +25,6 @@ export async function cancelInterviewSession(sessionId) {
 export async function deleteInterviewSession(sessionId) {
   const response = await apiClient.delete(
     `/api/interview-sessions/${sessionId}`,
-  );
-  return response.data;
-}
-
-export async function retryImprovementGeneration(sessionId) {
-  const response = await apiClient.post(
-    `/api/interview-sessions/${sessionId}/improvements/retry`,
   );
   return response.data;
 }

@@ -4,7 +4,16 @@ from datetime import date, timedelta
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.db.models import AdminAuditLog, AgentRun, UsageEvent, User
+from app.core.config import settings
+from app.db.models import (
+    AdminAuditLog,
+    AgentRun,
+    BackgroundJob,
+    UsageEvent,
+    User,
+    WorkerHeartbeat,
+)
+from app.services.background_job_service import utc_now, utc_text
 from app.services.admin_service import AdminServiceError, get_admin_user
 from app.services.usage_service import LIMITED_USAGE_TYPES, get_user_usage
 
@@ -250,4 +259,82 @@ def list_audit_logs(
         "total": total,
         "page": page,
         "page_size": page_size,
+    }
+
+
+def list_background_jobs(
+    db: Session,
+    *,
+    user_id: int | None,
+    task_type: str | None,
+    status: str | None,
+    page: int,
+    page_size: int,
+) -> dict:
+    query = db.query(BackgroundJob)
+    if user_id is not None:
+        query = query.filter(BackgroundJob.user_id == user_id)
+    if task_type:
+        query = query.filter(BackgroundJob.task_type == task_type)
+    if status:
+        query = query.filter(BackgroundJob.status == status)
+    total = query.count()
+    jobs = (
+        query.order_by(BackgroundJob.created_at.desc(), BackgroundJob.id.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+    return {
+        "items": [
+            {
+                "id": job.id,
+                "user_id": job.user_id,
+                "task_type": job.task_type,
+                "status": job.status,
+                "progress_percent": job.progress_percent,
+                "phase": job.phase,
+                "attempt_count": job.attempt_count,
+                "max_attempts": job.max_attempts,
+                "created_at": job.created_at,
+                "started_at": job.started_at,
+                "completed_at": job.completed_at,
+                "error_summary": (job.error_summary or "")[:200] or None,
+            }
+            for job in jobs
+        ],
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+    }
+
+
+def get_worker_status(db: Session) -> dict:
+    active_after = utc_text(
+        utc_now() - timedelta(seconds=settings.job_lease_seconds * 2)
+    )
+    rows = db.query(WorkerHeartbeat).order_by(WorkerHeartbeat.started_at.desc()).all()
+    workers = []
+    for index, heartbeat in enumerate(rows, start=1):
+        if heartbeat.stopped_at is not None:
+            state = "stopped"
+        elif heartbeat.heartbeat_at >= active_after:
+            state = "online"
+        else:
+            state = "offline"
+        workers.append(
+            {
+                "label": f"Worker {index}",
+                "state": state,
+                "database_type": heartbeat.database_dialect,
+                "started_at": heartbeat.started_at,
+                "last_seen_at": heartbeat.heartbeat_at,
+                "stopped_at": heartbeat.stopped_at,
+            }
+        )
+    return {
+        "online_count": sum(item["state"] == "online" for item in workers),
+        "offline_count": sum(item["state"] == "offline" for item in workers),
+        "stopped_count": sum(item["state"] == "stopped" for item in workers),
+        "workers": workers,
     }

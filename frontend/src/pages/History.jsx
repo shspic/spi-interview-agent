@@ -225,8 +225,7 @@ function History({ onOpenTrainingSession }) {
           <tr>
             <th>文件名</th>
             <th>类型</th>
-            <th>Chunk</th>
-            <th>距离</th>
+            <th>来源位置</th>
           </tr>
         </thead>
 
@@ -235,12 +234,7 @@ function History({ onOpenTrainingSession }) {
             <tr key={`${source.file_id}-${source.chunk_index}-${index}`}>
               <td>{source.filename || "未知文件"}</td>
               <td>{source.file_type || "-"}</td>
-              <td>{source.chunk_index ?? "-"}</td>
-              <td>
-                {source.distance === null || source.distance === undefined
-                  ? "-"
-                  : Number(source.distance).toFixed(4)}
-              </td>
+              <td>{source.chunk_index == null ? "文件" : `片段 ${source.chunk_index + 1}`}</td>
             </tr>
           ))}
         </tbody>

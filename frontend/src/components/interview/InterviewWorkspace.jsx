@@ -76,12 +76,6 @@ function InterviewWorkspace({ session, latestResult, busy, recoveryTurn, onSubmi
         <div className="interview-alert warning"><strong>下一题尚未生成</strong><p>刷新会话后仍无待答题目时，请使用恢复入口重试上一题处理。</p></div>
       )}
 
-      {session.agent_execution_summary && (
-        <details className="agent-summary">
-          <summary>Agent 执行摘要</summary>
-          <dl>{Object.entries(session.agent_execution_summary).map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{typeof value === "object" ? JSON.stringify(value) : String(value)}</dd></div>)}</dl>
-        </details>
-      )}
     </div>
   );
 }

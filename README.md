@@ -1,389 +1,194 @@
-# SPI面试Agent
+# SPI 面试 Agent
 
-> 浏览器认证已改为 HttpOnly Access/Refresh Cookie、服务端可撤销会话和会话绑定 CSRF，不再把 JWT 保存到 `localStorage`。本地与生产配置见 [认证与会话安全](docs/AUTH_SESSION_SECURITY.md)。
-> 本地首次启动、Secret 初始化和现有 SQLite 接管见 [本地开发安全初始化](docs/LOCAL_DEVELOPMENT_SETUP.md)；Schema 变更由 [Alembic 数据库迁移](docs/DATABASE_MIGRATIONS.md) 管理。
-> PostgreSQL、Worker、Docker、备份与默认离线的模型验证见 [生产数据库](docs/POSTGRESQL_PRODUCTION.md)、[后台任务](docs/BACKGROUND_JOBS.md)、[Docker](docs/DOCKER_PRODUCTION.md)、[备份恢复](docs/BACKUP_AND_RECOVERY.md) 和 [真实模型验证](docs/LIVE_MODEL_VALIDATION.md)。
+一个面向 AI 应用与 Python 后端求职者的证据驱动训练工作台：把个人资料、目标岗位、结构化面试、评价、改进复练和简历表达串成可恢复的完整流程。
 
-SPI面试Agent 是一个面向 AI 应用开发实习求职场景的智能面试训练与岗位匹配系统。
+> 当前交付状态：本地 Release Candidate。没有声称已公网部署、完成真实 DeepSeek 人工验收或通过本机 PostgreSQL/Docker 运行验证；准确门禁结果以本次最终验收报告为准。
 
-项目基于 FastAPI、React、SQLite、ChromaDB、DeepSeek、Tavily 和 LangGraph 构建，支持本地知识库管理、RAG 问答、岗位 JD 分析、模拟面试评价、联网搜索增强和 Agent 自动路由。
+## 适用场景与核心能力
 
----
+- 为目标岗位维护用户资料、JD、项目与简历文件。
+- 上传 PDF、TXT、MD，经过安全校验、解析、chunk、BGE embedding 后写入 Chroma。
+- 由 LangGraph Supervisor 协调 Evidence、Interviewer、Evaluation、Improvement 与 Resume Agent。
+- 完成“开始面试 → 逐题回答 → 五维评价 → 改进任务 → Retry 对比 → Resume 版本”的训练闭环。
+- 使用数据库驱动 BackgroundJob 处理索引、Agent、岗位分析、面试启动/评价、改进与简历生成。
+- 为用户和管理员提供用量、系统 readiness、任务状态、Worker 心跳、审计与认证安全事件视图。
 
-## 1. 项目定位
+## 技术栈
 
-本项目主要解决 AI 应用开发实习准备中的三个问题：
+- 前端：React 19、Vite 8、Axios、原生 History API 路由、CSS Design Tokens、Playwright 1.61.1。
+- 后端：Python 3.12、FastAPI、SQLAlchemy、Alembic、Pydantic、Uvicorn。
+- 数据：开发可用 SQLite；生产要求 PostgreSQL；Chroma 保存向量，独立 volume 保存 uploads。
+- AI：DeepSeek、LangGraph、Tavily、`BAAI/bge-small-zh-v1.5`、RAG、RRF 与 Evidence Set。
+- 交付：Docker/Compose、Nginx 同站点反向代理、pg_dump/restore、Release Preflight。
 
-1. 如何基于个人项目资料和学习笔记，进行有依据的面试问答训练；
-2. 如何结合岗位 JD 分析自己与目标岗位的匹配度；
-3. 如何通过 Agent 自动判断问题是否需要本地知识库、联网搜索或混合检索。
+## 架构
 
-系统强调两点：
+浏览器只访问同一 HTTPS Origin。反向代理提供 SPA 和 `/api`；FastAPI 负责认证、业务与任务创建，Worker 从 PostgreSQL claim 任务。PostgreSQL、uploads 和 Chroma 是三类必须协调备份的持久数据。
 
-* 用户个人经历、项目经历和能力判断必须基于本地知识库；
-* 当前岗位趋势、招聘要求和技术市场信息可以通过 Tavily 联网搜索补充。
+完整系统、RAG、Agent、认证和部署 Mermaid 图见 [最终架构](docs/ARCHITECTURE.md)。
 
----
+## RAG、Agent 与 Context Engineering
 
-## 2. 核心功能
+上传文件先校验类型、大小、安全文件名和用户存储配额，再解析、切分并建立向量索引。查询经过确定性 Query Analysis、有限多查询、RRF 融合、文件所有权校验、confidence 和 Evidence Set 选择；`/knowledge/search` 只是近似搜索展示，不代表 Agent 已采纳为证据。
 
-### 2.1 知识库管理
+LangGraph 不是普通聊天 UI 的包装。Supervisor 按任务阶段协调证据、提问、评价、改进与简历表达；上下文只携带当前用户允许的文件摘要、结构化 Evidence Set 和必要会话状态。证据不足时降低结论强度，冲突会显式提示，Resume 禁止扩写未被资料支持的成果。
 
-支持上传：
+## 安全边界
 
-* Markdown
-* TXT
-* PDF
+- HttpOnly Access/Refresh Cookie、服务端 AuthSession、Refresh 原子轮换与撤销。
+- 同站点 CSRF double-submit token、Origin 校验、明确 CORS Origin 和可信代理 CIDR。
+- 多用户查询在数据库和向量检索层都带所有权条件；管理员 UI 不显示 Token、Cookie、Secret、IP 明文或完整用户内容。
+- 上传只支持 PDF/TXT/MD，限制单文件、请求体、页数、行长度、用户总存储和速率。
+- Prompt Injection 评估要求跨用户泄露、非法 evidence source 和 unsafe behavior 均为 0。
+- 旧同步长任务默认返回受控 410；生产禁止开启 `ENABLE_SYNC_LONG_TASK_COMPAT`。
 
-系统会解析文档内容，切分为文本片段，并通过 embedding 模型写入 ChromaDB 向量库。
+详见 [认证安全](docs/AUTH_SESSION_SECURITY.md)、[API 与上传安全](docs/API_AND_UPLOAD_SECURITY.md) 和 [Agent 安全边界](docs/AGENT_SECURITY.md)。
 
-知识库页面支持：
+## BackgroundJob
 
-* 文件上传
-* 文件列表查看
-* 文件删除
-* 知识库状态查看
-* 知识库索引重建
+任务状态包括 `queued`、`running`、`retry_wait`、`cancel_requested`、`succeeded`、`failed`、`cancelled`、`timed_out`。幂等键防止重复创建；PostgreSQL `SKIP LOCKED` 防止多 Worker 重复 claim；lease、heartbeat 和过期恢复处理 Worker 中断；终态停止前端轮询。Worker 与兼容同步入口复用同一核心 service，不维护两套业务逻辑。
 
----
+接口迁移表见 [同步 API 收敛审计](docs/SYNC_API_AUDIT.md)，实现说明见 [后台任务](docs/BACKGROUND_JOBS.md)。
 
-### 2.2 RAG 自由问答
-
-用户可以基于本地知识库提问。
-
-系统流程：
-
-1. 用户输入问题；
-2. 后端从 ChromaDB 检索相关片段；
-3. 将相关片段与问题一起发送给 DeepSeek；
-4. 返回基于本地知识库的回答；
-5. 保存历史记录和引用来源。
-
----
-
-### 2.3 岗位 JD 分析
-
-用户可以粘贴岗位 JD，系统会结合本地知识库分析：
-
-* 岗位核心要求
-* 用户当前匹配点
-* 用户短板
-* 简历优化建议
-* 面试准备建议
-
-岗位分析支持可选 Tavily 联网搜索，用于补充当前岗位市场信息和技术趋势。
-
----
-
-### 2.4 模拟面试
-
-系统支持根据用户资料和岗位方向生成模拟面试问题，并对用户回答进行评价。
-
-评价维度包括：
-
-* 总分
-* 内容相关性
-* 个人经历匹配度
-* 技术准确性
-* 表达结构
-* 风险控制
-* 主要问题
-* 改进建议
-* 参考回答
-
----
-
-### 2.5 LangGraph Agent
-
-Agent 页面支持四种模式：
-
-* auto：由 LLM Router 自动判断路线；
-* local：只使用本地知识库；
-* web：只使用 Tavily 联网搜索；
-* hybrid：同时使用本地知识库和联网搜索。
-
-Agent 工作流：
-
-1. LLM Router 判断问题应该走 local / web / hybrid；
-2. local 路线检索 ChromaDB 本地知识库；
-3. web 路线调用 Tavily 联网搜索；
-4. hybrid 路线同时使用本地知识库和联网搜索；
-5. DeepSeek 生成最终回答；
-6. 保存路由原因、执行轨迹、引用来源和历史记录。
-
----
-
-### 2.6 历史记录
-
-系统支持查看：
-
-* 自由问答历史
-* 岗位分析历史
-* LangGraph Agent 历史
-* 模拟面试历史
-
-Agent 历史记录会保存：
-
-* 用户问题
-* Agent 回答
-* 实际路由
-* 路由原因
-* 执行轨迹
-* 本地知识库引用来源
-* 联网搜索来源
-
----
-
-### 2.7 系统状态自检
-
-系统状态页用于检查：
-
-* 后端服务状态
-* DeepSeek API Key 是否配置
-* Tavily API Key 是否配置
-* 数据库记录数量
-* 知识库文件数量
-* 向量片段数量
-* 索引状态
-
----
-
-## 3. 技术栈
-
-### 后端
-
-* FastAPI
-* Uvicorn
-* SQLite
-* SQLAlchemy
-* ChromaDB
-* sentence-transformers
-* pypdf
-* DeepSeek API
-* Tavily API
-* LangGraph
-
-### 前端
-
-* React
-* Vite
-* Axios
-* JavaScript
-* CSS
-
-### AI / RAG / Agent
-
-* RAG
-* Embedding
-* Vector Store
-* LLM Router
-* Tool Routing
-* LangGraph Workflow
-* Web Search Augmentation
-
----
-
-## 4. 项目结构
-
-```text
-NO1_agent/
-├── backend/
-│   ├── app/
-│   │   ├── api/
-│   │   ├── core/
-│   │   ├── db/
-│   │   ├── prompts/
-│   │   ├── services/
-│   │   └── main.py
-│   ├── data/
-│   ├── .env.example
-│   └── requirements.txt
-├── frontend/
-│   ├── src/
-│   │   ├── api/
-│   │   ├── pages/
-│   │   ├── utils/
-│   │   ├── App.jsx
-│   │   └── index.css
-│   ├── package.json
-│   └── vite.config.js
-├── docs/
-├── README.md
-├── .gitignore
-├── AGENTS.md
-└── CLAUDE.md
-```
-
----
-
-## 5. 后端启动
-
-进入后端目录：
+## 本地启动
 
 ```powershell
 cd D:\spir\NO1_agent\backend
-```
-
-安装依赖：
-
-```powershell
-.venv\Scripts\python.exe -m pip install -r requirements.txt
-```
-
-启动后端：
-
-```powershell
+.venv\Scripts\python.exe -m scripts.bootstrap_local_env
+.venv\Scripts\python.exe -m alembic upgrade head
 powershell -ExecutionPolicy Bypass -File .\scripts\start_backend_dev.ps1
 ```
 
-后端地址：
-
-```text
-http://localhost:8000
-```
-
-Swagger 文档：
-
-```text
-http://localhost:8000/docs
-```
-
----
-
-## 6. 前端启动
-
-进入前端目录：
+另开终端：
 
 ```powershell
 cd D:\spir\NO1_agent\frontend
-```
-
-安装依赖：
-
-```powershell
-npm install
-```
-
-启动前端：
-
-```powershell
+npm ci
 npm run dev
 ```
 
-前端地址：
+默认开发入口为 `http://localhost:5173`，API 文档为 `http://localhost:8000/docs`。不要把 `backend/.env` 提交到 Git。
 
-```text
-http://localhost:5173
+## Docker 启动
+
+本地使用纯虚构 process-only 环境变量后执行：
+
+```powershell
+docker compose config --quiet
+docker compose build
+docker compose up -d
+docker compose ps
 ```
 
----
+停止可执行 `docker compose down`，禁止使用 `down -v`。生产必须叠加 `deploy/docker-compose.production.yml`，详见 [部署与 Release 流程](docs/DEPLOYMENT.md) 与 [Docker 说明](docs/DOCKER_PRODUCTION.md)。
 
-## 7. 环境变量
+## 环境变量与生产要求
 
-后端本地配置由安全初始化工具创建或补齐：
+以 `backend/.env.example` 和 `deploy/.env.production.example` 为清单。生产至少要求：
 
-```text
-.venv\Scripts\python.exe -m scripts.bootstrap_local_env
+```env
+APP_ENVIRONMENT=production
+DATABASE_URL=postgresql+psycopg://...
+AUTH_COOKIE_SECURE=true
+AUTH_COOKIE_SAMESITE=lax
+AUTH_COOKIE_DOMAIN=
+CORS_ALLOWED_ORIGINS=https://example.com
+APP_TRUSTED_PROXY_CIDRS=172.30.0.0/24
+ENABLE_LEGACY_SCHEMA_PATCHES=false
+ENABLE_SYNC_LONG_TASK_COMPAT=false
 ```
 
-工具不会输出或覆盖已有 Secret，可重复运行。`backend/.env` 不应提交到 Git；不要把 `.env.example` 的 `change-me` 用于实际环境。数据库首次初始化与旧库接管命令见上述本地开发文档。
+Secret 只能来自受限环境文件或 Secret Manager。HTTPS 是生产硬要求；HSTS 只在全链路 HTTPS 稳定后启用。
 
----
+## Alembic 与数据库
 
-## 8. 推荐演示流程
+正常启动不会依赖运行时 `create_all`。新库执行 `alembic upgrade head`；现有旧 SQLite 先按 [迁移文档](docs/DATABASE_MIGRATIONS.md) 接管。生产必须使用 PostgreSQL psycopg 驱动。临时 SQLite 的验证顺序是 `upgrade head → current → downgrade -1 → upgrade head`，不得对真实开发库 downgrade。
 
-1. 启动后端；
-2. 启动前端；
-3. 打开系统状态页，确认后端、DeepSeek、Tavily、知识库状态正常；
-4. 上传个人项目资料或技术笔记；
-5. 重建知识库索引；
-6. 进入自由问答页面，测试本地 RAG 问答；
-7. 进入岗位分析页面，粘贴岗位 JD 并启用联网搜索；
-8. 进入模拟面试页面，生成问题并评价回答；
-9. 进入 LangGraph Agent 页面，测试 auto / local / web / hybrid；
-10. 进入历史记录页面，查看问答、岗位分析、Agent 执行轨迹和模拟面试记录。
-
----
-
-## 9. 项目亮点
-
-### RAG 亮点
-
-* 支持多格式文档上传与解析；
-* 使用 ChromaDB 管理本地向量库；
-* 回答时保留引用来源；
-* 明确限制模型不能编造用户经历。
-
-### Agent 亮点
-
-* 使用 LangGraph 构建 Agent 工作流；
-* 使用 LLM Router 自动判断 local / web / hybrid；
-* 支持 Tavily 联网搜索；
-* 保存路由原因和执行轨迹；
-* 可在历史记录中查看 Agent 的工具调用过程。
-
-### 工程亮点
-
-* 前后端分离；
-* FastAPI 提供结构化接口；
-* React 构建多页面交互；
-* SQLite 保存业务记录；
-* 系统状态页用于自检；
-* `.env` 与本地数据不进入 Git。
-
----
-
-## 10. 当前限制
-
-* 当前项目主要面向本地演示；
-* 尚未进行 Docker 化部署；
-* 知识库索引重建为手动触发；
-* Agent 路由质量依赖 LLM 输出；
-* 大模型回答质量依赖本地知识库质量和 Prompt 约束。
-
----
-
-## 11. 后续优化方向
-
-* 增加用户登录与多用户隔离；
-* 增加异步任务队列处理索引重建；
-* 增加 Docker Compose 一键启动；
-* 优化 Agent 工具调用过程可视化；
-* 增加更多面试题库和岗位样例；
-* 支持导出面试报告和岗位分析报告。
-
-```
-```
-
----
-
-## 12. 项目评估
-
-项目提供默认不访问真实网络、模型或用户数据的 Mock 评估基线：
+## 测试与 Evals
 
 ```powershell
 cd D:\spir\NO1_agent\backend
+.venv\Scripts\python.exe -m pytest -q
 .venv\Scripts\python.exe -m evals.run_evals
 .venv\Scripts\python.exe -m evals.run_evals --group retrieval
-.venv\Scripts\python.exe -m evals.run_retrieval_calibration --check-model-cache
-# 仅在本地缓存存在时人工显式运行；不会下载模型
-.venv\Scripts\python.exe -m evals.run_retrieval_calibration --real-embedding
-# 独立 validation；final holdout 仅在生产文件哈希冻结后运行
-.venv\Scripts\python.exe -m evals.run_retrieval_calibration --real-embedding --dataset validation
-.venv\Scripts\python.exe -m evals.run_retrieval_calibration --real-embedding --dataset holdout --final-holdout
-.venv\Scripts\python.exe -m evals.run_retrieval_coverage --check-datasets
-.venv\Scripts\python.exe -m evals.run_retrieval_coverage --real-embedding --dataset development
-.venv\Scripts\python.exe -m evals.run_retrieval_coverage --real-embedding --dataset validation
-# 仅在生产冻结校验通过后正式运行一次
-.venv\Scripts\python.exe -m evals.run_retrieval_coverage --real-embedding --dataset holdout --final-holdout
+.venv\Scripts\python.exe -m evals.run_live_agent_smoke --check
+
+cd ..\frontend
+npm run lint
+npm run build
+npm run test:e2e
 ```
 
-每次运行的 JSON、case 明细和 Markdown 报告位于 `backend/evals/results/<运行时间>/`，详细指标、门槛和首次结果参见 [自动化评估基线](docs/EVALUATION_BASELINE.md)，证据所有权与 Prompt Injection 防护参见 [Agent 安全边界](docs/AGENT_SECURITY.md)，候选池与确定性重排参见 [检索候选与排序](docs/RETRIEVAL_RANKING.md)，真实 BGE/Chroma 的隔离测量参见 [真实 Embedding 检索校准](docs/RETRIEVAL_CALIBRATION.md)，排序与证据接受、validation/holdout 纪律参见 [检索证据充分性](docs/RETRIEVAL_CONFIDENCE.md)。
+本次 Release Candidate 本地实测为后端 `363 passed, 3 skipped`；3 个 PostgreSQL marker 因 Docker daemon/安全测试库不可用而跳过。Mock 为 `81/81`，Retrieval 为 `20/20`。Playwright 静态发现 10 条，真实 CLI 浏览器冒烟已完成；Playwright Test 匹配版 Chromium 下载受限，自动套件未伪装为通过。E2E 使用纯虚构 API fixture，不访问公网或真实模型。
 
-生产 Evidence 检索现已支持确定性 Query Analysis、最多两个查询变体和三次 Chroma 查询、RRF 候选融合、可信文件身份辅助、互补证据集合选择及集合级 `sufficient`。`/knowledge/search` 仍保持近似搜索展示语义。coverage final holdout 的方案 D Recall@3 为 81.48%、MRR 89.81%，安全指标为 0，但完整目标评估未通过；设计和完整失败项见 [检索查询分析与证据集合](docs/RETRIEVAL_EVIDENCE_SETS.md)。
+## Live Harness
 
----
+真实 DeepSeek 验证默认关闭。先运行 `--check` 查看 case 数、最大调用数、Token 和成本上限；真实运行必须显式开 gate 并人工确认，数据全为虚构，报告脱敏。人工评分覆盖问题自然度、追问合理性、评分公平性、证据忠实度、优化答案自然度和 Resume 是否夸大。详见 [真实模型验证](docs/LIVE_MODEL_VALIDATION.md)。
 
-## 13. API 与上传安全
+## 管理员、数据保留与备份
 
-朋友试用前的突发限流、可信代理、请求体与字段限制、`.md/.txt/.pdf` 上传白名单、流式大小校验、用户存储预留、下载隔离、CORS、安全响应头、请求 ID、错误与日志脱敏配置见 [API 与上传安全边界](docs/API_AND_UPLOAD_SECURITY.md)。真实 Secret 只写入未纳入 Git 的 `backend/.env`；安全配置示例见 `backend/.env.example`。
+- 管理后台正式 URL：`/admin`。未登录跳转登录，普通用户得到 403，权限不来自 localStorage。
+- 管理员可查看用户、Usage、Agent Runs、Audit、邀请码、清理、Background Jobs 和脱敏 Worker 状态。
+- 默认业务数据保留期为 7 天，可预览后通过后台任务清理；账号删除需要密码、用户名和固定确认文本。
+- PostgreSQL dump 不包含 uploads 与 Chroma，三者必须在同一维护窗口协调备份并定期恢复演练。
+
+## Release Preflight
+
+```powershell
+cd D:\spir\NO1_agent\backend
+.venv\Scripts\python.exe -m scripts.release_preflight --dry-run
+```
+
+工具只读，输出 `pass/warn/fail`，不打印 Secret、不迁移、不建管理员、不调用模型；生产 `fail` 时退出非零。
+
+## 演示
+
+先创建一个没有真实资料的本地账号，再执行：
+
+```powershell
+cd D:\spir\NO1_agent\backend
+.venv\Scripts\python.exe -m scripts.seed_demo_data --username <虚构演示账号>
+```
+
+工具只允许 development/test，不创建默认密码，不覆盖已有资料，可用 `--cleanup` 只清理自身标记的数据。点击顺序与 1/3/5 分钟讲法见 [演示脚本](docs/DEMO_SCRIPT.md)，素材位于 `docs/demo/`。
+
+## 目录结构
+
+```text
+backend/app/        FastAPI、服务、模型、Agent 与安全边界
+backend/alembic/    数据库迁移
+backend/evals/      Mock、Retrieval 与 Live Harness
+backend/scripts/    初始化、备份、恢复、preflight、demo seed
+frontend/src/       路由、页面、组件、Design Tokens
+frontend/e2e/       Playwright 浏览器测试与虚构 API fixture
+deploy/             生产 Compose、HTTPS Nginx、环境模板
+docs/               架构、部署、演示、简历和面试材料
+```
+
+## API 入口
+
+- `/api/auth/*`：Cookie 会话、CSRF、登录、轮换与撤销。
+- `/api/tasks/*`：后台任务创建、查询与取消。
+- `/api/interview-sessions/*`：轻量会话 CRUD、详情和只读结果。
+- `/api/files`、`/api/knowledge/*`：上传、索引和近似搜索。
+- `/api/admin/*`：管理员受保护接口。
+- `/api/health/live`、`/api/health/ready`：存活和就绪。
+
+## 已知局限
+
+- 当前 `npm audit --omit=dev --audit-level=high` 会报告 Axios 的 Node 侧传递依赖 `form-data 4.0.5` 存在 2 个 high 风险项。上游已发布 `4.0.6` 修复版，但本次环境无法写 npm cache，未能更新锁文件；本项不应被表述为依赖审计通过。浏览器生产包使用原生 `FormData`，公网发布前仍必须升级并重跑审计、lint 和 build。
+
+- 当前是单机 Compose 交付，不声称大规模高并发或公网运营验证。
+- 不支持 CSV、Excel、图片 OCR，也未更换 BGE embedding。
+- SQLite 只适合本地单 Worker；生产并发路径要求 PostgreSQL。
+- Live DeepSeek 质量需要用户后续付费、显式确认并人工验收。
+- Chroma、uploads 与 PostgreSQL 的一致备份仍需要维护窗口协调。
+- E2E fixture 验证浏览器主流程，不能替代真实 Docker/PostgreSQL 环境冒烟。
+
+## Roadmap
+
+优先完成真实 PostgreSQL/Docker 恢复演练、真实模型人工评分和公网前的安全复核；不计划为当前 RC 引入 Redis、Celery、Kafka、RabbitMQ 或 Kubernetes。
+
+## License
+
+当前仓库未声明开源许可证。除非仓库所有者另行添加 License，不应推定获得复制、分发或商用授权。

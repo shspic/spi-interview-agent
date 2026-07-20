@@ -70,6 +70,18 @@ export async function getAdminAuditLogs(params) {
   return response.data;
 }
 
+export async function getAdminBackgroundJobs(params) {
+  const response = await apiClient.get("/api/admin/background-jobs", {
+    params: compactParams(params),
+  });
+  return response.data;
+}
+
+export async function getAdminWorkers() {
+  const response = await apiClient.get("/api/admin/workers");
+  return response.data;
+}
+
 export async function getRegistrationSettings() {
   const response = await apiClient.get("/api/admin/settings/registration");
   return response.data;

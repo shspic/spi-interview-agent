@@ -21,6 +21,9 @@ class Settings(BaseModel):
     enable_legacy_schema_patches: bool = (
         os.getenv("ENABLE_LEGACY_SCHEMA_PATCHES", "false").lower() == "true"
     )
+    enable_sync_long_task_compat: bool = (
+        os.getenv("ENABLE_SYNC_LONG_TASK_COMPAT", "false").lower() == "true"
+    )
     embedding_model_name: str = os.getenv(
         "EMBEDDING_MODEL_NAME",
         "BAAI/bge-small-zh-v1.5",
@@ -296,6 +299,8 @@ class Settings(BaseModel):
             raise ValueError("生产环境必须配置独立的 AUTH_CSRF_SECRET")
         if environment == "production" and self.enable_legacy_schema_patches:
             raise ValueError("生产环境禁止启用旧版运行时 Schema 补丁")
+        if environment == "production" and self.enable_sync_long_task_compat:
+            raise ValueError("生产环境禁止启用旧同步长任务兼容入口")
         configured_database_url = self.database_url.strip()
         if configured_database_url:
             scheme = urlsplit(configured_database_url).scheme.lower()

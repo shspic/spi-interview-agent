@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.security import get_current_user
@@ -61,6 +61,7 @@ from app.services.usage_service import (
     release_usage,
     reserve_usage,
 )
+from app.api.deprecation import enforce_sync_long_task_policy
 
 router = APIRouter()
 
@@ -416,12 +417,15 @@ def delete_session(
 @router.post(
     "/interview-sessions/{session_id}/start",
     response_model=InterviewStartResponse,
+    deprecated=True,
 )
 def start_session(
     session_id: int,
+    response: Response,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    enforce_sync_long_task_policy(response, "/api/tasks/interview-start")
     try:
         reservation = reserve_usage(
             db,
@@ -467,13 +471,19 @@ def start_session(
 @router.post(
     "/interview-sessions/{session_id}/answer",
     response_model=InterviewAnswerResponse,
+    deprecated=True,
 )
 def answer_session_question(
     session_id: int,
     request: InterviewAnswerRequest,
+    response: Response,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    enforce_sync_long_task_policy(
+        response,
+        "/api/tasks/interview-evaluation",
+    )
     try:
         result = answer_interview_turn(
             db,
@@ -542,12 +552,15 @@ def cancel_session(
 @router.post(
     "/interview-sessions/{session_id}/improvements/retry",
     response_model=ImprovementGenerationResponse,
+    deprecated=True,
 )
 def retry_improvement_generation(
     session_id: int,
+    response: Response,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    enforce_sync_long_task_policy(response, "/api/tasks/improvements")
     try:
         result = generate_improvements_for_session(
             db,

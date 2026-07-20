@@ -1,74 +1,49 @@
 import { useCallback, useEffect, useState } from "react";
 
 import apiClient from "../api/client";
+import StatePanel from "../components/StatePanel";
+
+const checks = [
+  ["auth_ready", "认证配置", "登录与会话配置可用"],
+  ["database_ready", "数据库", "应用可以连接数据库"],
+  ["schema_ready", "数据库版本", "迁移版本与应用一致"],
+  ["storage_ready", "持久目录", "上传与知识索引目录可用"],
+  ["task_system_ready", "后台任务表", "任务数据结构已就绪"],
+  ["worker_ready", "Worker", "最近收到 Worker 心跳"],
+];
 
 function SystemStatus() {
   const [status, setStatus] = useState(null);
-  const [message, setMessage] = useState("");
+  const [details, setDetails] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   const fetchStatus = useCallback(async () => {
-    try {
-      setMessage("正在检查系统状态...");
-      const response = await apiClient.get("/api/system/status");
-      setStatus(response.data);
-      setMessage("系统状态检查完成。");
-    } catch (error) {
-      console.error("system status error:", error);
-      const detail = error.response?.data?.detail;
-      setMessage(detail || "系统状态检查失败，请确认后端是否启动。");
-    }
+    setLoading(true);
+    setError("");
+    const [readyResult, detailResult] = await Promise.allSettled([
+      apiClient.get("/api/health/ready"),
+      apiClient.get("/api/system/status"),
+    ]);
+    const readyData = readyResult.status === "fulfilled" ? readyResult.value.data : readyResult.reason.response?.data;
+    setStatus(readyData || null);
+    if (detailResult.status === "fulfilled") setDetails(detailResult.value.data);
+    if (!readyData) setError("无法连接后端服务，请确认服务已启动后重试。");
+    setLoading(false);
   }, []);
 
   useEffect(() => {
-    const timerId = window.setTimeout(fetchStatus, 0);
-
-    return () => window.clearTimeout(timerId);
+    const timer = window.setTimeout(fetchStatus, 0);
+    return () => window.clearTimeout(timer);
   }, [fetchStatus]);
 
   return (
-    <section>
-      <h1>系统状态</h1>
-      <p>检查后端、API Key、数据库、知识库索引等状态。</p>
-
-      <div className="chat-actions">
-        <button type="button" onClick={fetchStatus}>
-          刷新状态
-        </button>
-      </div>
-
-      {message && <p className="message-text">{message}</p>}
-
-      {status && (
-        <div className="status-grid">
-          <div className="status-box">
-            <h2>后端</h2>
-            <p>状态：{status.backend?.status}</p>
-            <p>应用名：{status.backend?.app_name}</p>
-          </div>
-
-          <div className="status-box">
-            <h2>API Key</h2>
-            <p>DeepSeek：{status.keys?.deepseek_configured ? "已配置" : "未配置"}</p>
-            <p>Tavily：{status.keys?.tavily_configured ? "已配置" : "未配置"}</p>
-          </div>
-
-          <div className="status-box">
-            <h2>数据库</h2>
-            <p>文件记录：{status.database?.file_count}</p>
-            <p>历史记录：{status.database?.history_count}</p>
-            <p>面试记录：{status.database?.interview_count}</p>
-          </div>
-
-          <div className="status-box">
-            <h2>知识库</h2>
-            <p>文件总数：{status.knowledge_base?.total_files}</p>
-            <p>已索引文件：{status.knowledge_base?.indexed_files}</p>
-            <p>失败文件：{status.knowledge_base?.failed_files}</p>
-            <p>向量片段数：{status.knowledge_base?.total_chunks}</p>
-            <p>状态：{status.knowledge_base?.status}</p>
-          </div>
-        </div>
-      )}
+    <section className="system-status-page">
+      <div className="page-heading-row"><div><h1>系统状态</h1><p>这里展示用户可理解的可用性信息，不会显示 Secret、物理路径或连接凭据。</p></div><button type="button" onClick={fetchStatus} disabled={loading}>{loading ? "检查中..." : "重新检查"}</button></div>
+      {error && <StatePanel tone="error" title="服务不可达" description={error} actionLabel="重试" onAction={fetchStatus} />}
+      {status && <StatePanel tone={status.status === "ready" ? "success" : "warning"} title={status.status === "ready" ? "核心服务已就绪" : "服务处于降级状态"} description={status.status === "ready" ? "可以继续使用面试训练与资料管理。" : "部分能力暂不可用，请查看下方检查项。"} />}
+      {status && <div className="health-check-grid">{checks.map(([key, label, description]) => <article key={key} className={status[key] ? "is-ready" : "is-degraded"}><span>{status[key] ? "可用" : "需检查"}</span><h2>{label}</h2><p>{description}</p></article>)}</div>}
+      {details && <div className="status-summary-grid"><article><span>数据库类型</span><strong>{status?.database_type === "postgresql" ? "PostgreSQL" : "SQLite（本地）"}</strong></article><article><span>资料文件</span><strong>{details.database?.file_count ?? 0}</strong></article><article><span>面试记录</span><strong>{details.database?.interview_count ?? 0}</strong></article><article><span>知识片段</span><strong>{details.knowledge_base?.total_chunks ?? 0}</strong></article></div>}
     </section>
   );
 }

@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import {
   changeMyPassword,
   cleanupMyBusinessData,
+  deleteMyAccount,
   getMyProfile,
   previewMyDataCleanup,
 } from "../api/account";
@@ -11,6 +12,7 @@ import { getFriendlyErrorMessage } from "../utils/errorMessage";
 import { formatDateTime } from "../utils/format";
 
 const CLEANUP_CONFIRMATION = "DELETE_MY_DATA";
+const ACCOUNT_DELETE_CONFIRMATION = "DELETE_MY_ACCOUNT";
 
 function Settings({ onDataCleaned }) {
   const { currentUser, logout, logoutAll } = useAuth();
@@ -32,6 +34,13 @@ function Settings({ onDataCleaned }) {
   const [cleanupPassword, setCleanupPassword] = useState("");
   const [cleanupConfirm, setCleanupConfirm] = useState("");
   const [cleanupAcknowledged, setCleanupAcknowledged] = useState(false);
+  const [deleteForm, setDeleteForm] = useState({
+    current_password: "",
+    confirm_username: "",
+    confirm: "",
+  });
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -111,6 +120,25 @@ function Settings({ onDataCleaned }) {
       setCleanupError(getFriendlyErrorMessage(error, "个人业务数据清理失败。"));
     } finally {
       setCleanupLoading(false);
+    }
+  };
+
+  const executeAccountDeletion = async (event) => {
+    event.preventDefault();
+    if (!window.confirm("确认永久删除当前账号及全部关联数据？此操作不可撤销。")) return;
+    setDeleteLoading(true);
+    setDeleteError("");
+    try {
+      const result = await deleteMyAccount(deleteForm);
+      if (!result.success) {
+        setDeleteError("文件或索引清理失败，账号已保留。请稍后重试或联系管理员。");
+        return;
+      }
+      await logout();
+    } catch (error) {
+      setDeleteError(getFriendlyErrorMessage(error, "账号删除失败，账号与数据均未确认删除。"));
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
@@ -195,6 +223,15 @@ function Settings({ onDataCleaned }) {
             {(cleanupResult.failed_items || []).map((item, index) => <p key={`${item.resource_type}-${index}`}>{item.resource_type} / {item.resource_id}：{item.error_type}</p>)}
           </div>
         )}
+        <form className="cleanup-confirm-panel account-delete-panel" onSubmit={executeAccountDeletion}>
+          <h3>永久删除账号</h3>
+          <p>将删除账号、登录会话、个人资料、岗位、上传文件、索引及训练记录。操作失败时不会声称删除成功。</p>
+          <label>当前密码<input type="password" value={deleteForm.current_password} onChange={(event) => setDeleteForm((value) => ({ ...value, current_password: event.target.value }))} required autoComplete="current-password" /></label>
+          <label>输入当前用户名 <code>{currentUser?.username}</code><input value={deleteForm.confirm_username} onChange={(event) => setDeleteForm((value) => ({ ...value, confirm_username: event.target.value }))} required autoComplete="off" /></label>
+          <label>输入确认文本 <code>{ACCOUNT_DELETE_CONFIRMATION}</code><input value={deleteForm.confirm} onChange={(event) => setDeleteForm((value) => ({ ...value, confirm: event.target.value }))} required autoComplete="off" /></label>
+          {deleteError && <p className="inline-error" role="alert">{deleteError}</p>}
+          <button type="submit" className="danger-button" disabled={deleteLoading || deleteForm.confirm !== ACCOUNT_DELETE_CONFIRMATION || deleteForm.confirm_username !== currentUser?.username}>{deleteLoading ? "删除中…" : "永久删除账号"}</button>
+        </form>
       </div>
     </section>
   );

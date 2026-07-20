@@ -5,9 +5,9 @@ import { getFriendlyErrorMessage } from "../utils/errorMessage";
 
 const USERNAME_PATTERN = /^[a-z0-9_]{3,32}$/;
 
-function AuthPage() {
+function AuthPage({ initialMode = "login", onModeChange }) {
   const { login, register } = useAuth();
-  const [mode, setMode] = useState("login");
+  const mode = initialMode;
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -19,7 +19,8 @@ function AuthPage() {
   const isRegisterMode = mode === "register";
 
   const switchMode = () => {
-    setMode(isRegisterMode ? "login" : "register");
+    const nextMode = isRegisterMode ? "login" : "register";
+    onModeChange?.(nextMode);
     setPassword("");
     setConfirmPassword("");
     setInviteCode("");
@@ -119,7 +120,7 @@ function AuthPage() {
               {showPassword ? "隐藏" : "显示"}
             </button>
           </div>
-          <p className="auth-help">至少 8 个字符。</p>
+          <p className="auth-help">至少 8 个字符，建议同时使用大小写字母、数字和符号。</p>
 
           {isRegisterMode && (
             <>

@@ -1,6 +1,6 @@
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, ConfigDict, field_validator
 from sqlalchemy.orm import Session
 
@@ -16,6 +16,7 @@ from app.services.usage_service import (
     release_usage,
     reserve_usage,
 )
+from app.api.deprecation import enforce_sync_long_task_policy
 
 router = APIRouter()
 
@@ -41,12 +42,15 @@ class JobAnalyzeRequest(BaseModel):
     "/jobs/analyze",
     summary="岗位 JD 分析",
     description="结合岗位 JD、本地知识库和可选联网搜索，分析用户匹配点、短板、简历优化建议和可能面试问题。",
+    deprecated=True,
 )
 def analyze_job_api(
     request: JobAnalyzeRequest,
+    response: Response,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    enforce_sync_long_task_policy(response, "/api/tasks/job-analysis")
     try:
         reservation = reserve_usage(
             db,

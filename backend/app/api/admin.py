@@ -1,7 +1,7 @@
 from datetime import date, timedelta
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.orm import Session
 
 from app.core.security import get_current_admin
@@ -18,8 +18,10 @@ from app.services.admin_audit_service import add_admin_audit_log
 from app.services.admin_reporting_service import (
     get_usage_summary,
     get_user_usage_report,
+    get_worker_status,
     list_agent_runs,
     list_audit_logs,
+    list_background_jobs,
 )
 from app.services.admin_service import (
     AdminServiceError,
@@ -41,6 +43,7 @@ from app.services.registration_setting_service import (
 )
 from app.services.rate_limit_service import enforce_user_rate_limit
 from app.services.usage_service import get_local_now
+from app.api.deprecation import enforce_sync_long_task_policy
 
 router = APIRouter()
 
@@ -285,12 +288,14 @@ def cleanup_preview(
     return preview_expired_data(db)
 
 
-@router.post("/admin/maintenance/cleanup")
+@router.post("/admin/maintenance/cleanup", deprecated=True)
 def cleanup(
     request: CleanupRequest,
+    response: Response,
     db: Session = Depends(get_db),
     current_admin: User = Depends(get_current_admin),
 ):
+    enforce_sync_long_task_policy(response, "/api/tasks/retention-cleanup")
     enforce_user_rate_limit(db, current_admin.id, "admin_write")
     if request.confirm != CLEANUP_CONFIRMATION:
         add_admin_audit_log(
@@ -358,3 +363,41 @@ def audit_logs(
         page=page,
         page_size=page_size,
     )
+
+
+@router.get("/admin/background-jobs")
+def background_jobs(
+    user_id: int | None = None,
+    task_type: str | None = Query(default=None, max_length=64, pattern=r"^[a-z_]*$"),
+    status: Literal[
+        "queued",
+        "running",
+        "retry_wait",
+        "cancel_requested",
+        "succeeded",
+        "failed",
+        "cancelled",
+        "timed_out",
+    ]
+    | None = None,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin),
+):
+    return list_background_jobs(
+        db,
+        user_id=user_id,
+        task_type=task_type,
+        status=status,
+        page=page,
+        page_size=page_size,
+    )
+
+
+@router.get("/admin/workers")
+def worker_status(
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin),
+):
+    return get_worker_status(db)

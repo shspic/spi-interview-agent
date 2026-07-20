@@ -59,6 +59,7 @@ def client(db_session, monkeypatch):
     monkeypatch.setattr(settings, "auth_csrf_secret", "test-csrf-secret-with-sufficient-length")
     monkeypatch.setattr(settings, "auth_cookie_secure", False)
     monkeypatch.setattr(settings, "app_environment", "test")
+    monkeypatch.setattr(settings, "enable_sync_long_task_compat", True)
 
     def override_get_db():
         yield db_session
