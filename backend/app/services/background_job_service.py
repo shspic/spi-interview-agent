@@ -432,6 +432,29 @@ def update_job_progress(
     return job
 
 
+def renew_job_lease(db: Session, job_id: str, worker_id: str) -> bool:
+    now = utc_now()
+    updated = (
+        db.query(BackgroundJob)
+        .filter(
+            BackgroundJob.id == job_id,
+            BackgroundJob.status == "running",
+            BackgroundJob.worker_id == worker_id,
+        )
+        .update(
+            {
+                BackgroundJob.heartbeat_at: utc_text(now),
+                BackgroundJob.lease_expires_at: utc_text(
+                    now + timedelta(seconds=settings.job_lease_seconds)
+                ),
+            },
+            synchronize_session=False,
+        )
+    )
+    db.commit()
+    return updated == 1
+
+
 def should_cancel(db: Session, job_id: str, worker_id: str) -> bool:
     db.expire_all()
     job = db.get(BackgroundJob, job_id)
@@ -502,6 +525,7 @@ def fail_job(
     worker_id: str,
     *,
     error_code: str,
+    error_summary: str | None = None,
     timed_out: bool = False,
     retryable: bool = True,
 ) -> BackgroundJob:
@@ -553,7 +577,7 @@ def fail_job(
         phase="failed",
         message_code="job_failed",
         error_code=error_code,
-        error_summary="任务执行失败",
+        error_summary=error_summary or "任务执行失败",
     )
     _release_job_quota(db, job, error_code)
     db.refresh(job)

@@ -11,7 +11,8 @@ test("TXT 上传、索引进度、近似搜索与删除形成闭环", async ({ p
   await expect(page.getByText("demo-project.txt")).toBeVisible();
   page.once("dialog", (dialog) => dialog.accept());
   await page.getByRole("button", { name: "重建知识库索引" }).click();
-  await expect(page.getByText("知识库索引重建完成")).toBeVisible();
+  await expect(page.getByText("已完成", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("知识库索引进度 100%")).toBeVisible();
   await page.getByLabel("在我的资料中近似搜索").fill("后台任务如何恢复");
   await page.getByRole("button", { name: "搜索", exact: true }).click();
   await expect(page.getByText(/lease 与 heartbeat/)).toBeVisible();
@@ -24,7 +25,7 @@ test("后台任务超时显示可恢复操作，终态停止轮询", async ({ pa
   const state = await installApiMock(page, { jobStatus: "timed_out" });
   await page.addInitScript(() => localStorage.setItem("spi.background-job.knowledge-rebuild", "fixture-task-1"));
   await page.goto("/knowledge");
-  await expect(page.getByText("任务超过允许时间")).toBeVisible();
+  await expect(page.getByText("任务超过允许时间", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "重新创建" })).toBeVisible();
   const pollsAtTerminal = state.taskPolls;
   await page.waitForTimeout(1500);

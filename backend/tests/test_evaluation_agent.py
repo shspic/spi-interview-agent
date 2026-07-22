@@ -14,7 +14,13 @@ from app.agents.schemas import (
 )
 from app.agents.structured_llm import StructuredLLMError
 from app.core.config import settings
-from app.db.models import AgentRun, InterviewSession, InterviewTurn, UsageEvent
+from app.db.models import (
+    AgentRun,
+    BackgroundJob,
+    InterviewSession,
+    InterviewTurn,
+    UsageEvent,
+)
 from app.services.evaluation_service import (
     calculate_total_score,
     summarize_completed_session,
@@ -500,6 +506,51 @@ def test_evaluation_limit_preserves_answer_and_can_recover(
     assert recovered.status_code == 200
     db_session.refresh(stored)
     assert stored.total_score == 76
+
+
+def test_background_evaluation_rejects_different_saved_answer_before_queue(
+    client,
+    db_session,
+    monkeypatch,
+):
+    install_flow(monkeypatch, EvaluationFlowLLM())
+    headers, _ = register_and_login(client, "bgrecovery")
+    session_id, turn = create_and_start(client, headers)
+    stored = db_session.get(InterviewTurn, turn["id"])
+    stored.user_answer = "我主要负责检索模块。"
+    stored.answered_at = datetime.now().isoformat(timespec="seconds")
+    db_session.commit()
+
+    conflicting = client.post(
+        "/api/tasks/interview-evaluation",
+        headers={**headers, "Idempotency-Key": "evaluation-conflict-0001"},
+        json={
+            "session_id": session_id,
+            "turn_id": turn["id"],
+            "answer": "这是另一份回答。",
+        },
+    )
+
+    assert conflicting.status_code == 409
+    assert conflicting.json()["detail"] == "该题目已经回答"
+    assert db_session.query(BackgroundJob).count() == 0
+
+    recovered = client.post(
+        "/api/tasks/interview-evaluation",
+        headers={**headers, "Idempotency-Key": "evaluation-recovery-0001"},
+        json={
+            "session_id": session_id,
+            "turn_id": turn["id"],
+            "answer": "  我主要负责检索模块。  ",
+        },
+    )
+
+    assert recovered.status_code == 202
+    assert recovered.json()["created"] is True
+    db_session.refresh(stored)
+    assert stored.user_answer == "我主要负责检索模块。"
+    assert db_session.query(InterviewTurn).filter_by(session_id=session_id).count() == 1
+    assert db_session.query(BackgroundJob).count() == 1
 
 
 def test_supervisor_receives_evaluation_summary_and_can_follow_up(

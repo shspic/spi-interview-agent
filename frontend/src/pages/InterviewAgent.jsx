@@ -156,6 +156,23 @@ function InterviewAgent({ onOpenProfile, onOpenKnowledge, requestedSessionId }) 
     return nextSessions;
   }, []);
 
+  const refreshUnsuccessfulEvaluation = useCallback(async (terminalJob) => {
+    const sessionId = session?.id || Number(localStorage.getItem(ACTIVE_SESSION_KEY));
+    if (!sessionId) {
+      return;
+    }
+    try {
+      await loadSession(sessionId, "interview");
+    } catch (error) {
+      setMessage(getFriendlyErrorMessage(
+        error,
+        terminalJob.error_summary
+          ? `${terminalJob.error_summary} 已保存回答刷新失败，请手动刷新会话。`
+          : "评价任务未完成，且无法刷新已保存的回答。请手动刷新会话。",
+      ));
+    }
+  }, [loadSession, session?.id]);
+
   const startTask = useBackgroundJob("interview-start", async (result) => {
     await loadSession(result.session_id, "interview");
     setLatestResult(null);
@@ -177,7 +194,7 @@ function InterviewAgent({ onOpenProfile, onOpenKnowledge, requestedSessionId }) 
     }
     await refreshSessions();
     setMessage(result.is_completed ? "本轮面试已完成。" : "回答评价已完成。");
-  });
+  }, refreshUnsuccessfulEvaluation);
   const improvementTask = useBackgroundJob("interview-improvement", async (result) => {
     await loadSession(result.session_id, "tasks");
     await refreshSessions();

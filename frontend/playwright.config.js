@@ -14,8 +14,9 @@ export default defineConfig({
     baseURL: "http://127.0.0.1:4180",
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
-    video: "retain-on-failure",
+    video: globalThis.process?.env.PLAYWRIGHT_DISABLE_VIDEO ? "off" : "retain-on-failure",
     ...devices["Desktop Chrome"],
+    channel: globalThis.process?.env.PLAYWRIGHT_CHANNEL || undefined,
   },
   webServer: {
     command: "npm run dev -- --host 127.0.0.1 --port 4180",

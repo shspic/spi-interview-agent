@@ -16,13 +16,15 @@ function createIdempotencyKey(prefix) {
   return `${prefix}:${randomPart}`;
 }
 
-export default function useBackgroundJob(storageKey, onSucceeded) {
+export default function useBackgroundJob(storageKey, onSucceeded, onUnsuccessfulTerminal) {
   const [job, setJob] = useState(null);
   const timerRef = useRef(null);
   const pollRef = useRef(null);
   const pollCountRef = useRef(0);
   const mountedRef = useRef(true);
   const successHandlerRef = useRef(onSucceeded);
+  const unsuccessfulTerminalHandlerRef = useRef(onUnsuccessfulTerminal);
+  const handledTerminalTaskIdsRef = useRef(new Set());
 
   const storageName = `${STORAGE_PREFIX}${storageKey}`;
 
@@ -49,8 +51,17 @@ export default function useBackgroundJob(storageKey, onSucceeded) {
         setJob(nextJob);
         if (TERMINAL_STATUSES.has(nextJob.status)) {
           window.localStorage.removeItem(storageName);
-          if (nextJob.status === "succeeded") {
-            await successHandlerRef.current?.(nextJob.result || {});
+          if (!handledTerminalTaskIdsRef.current.has(taskId)) {
+            handledTerminalTaskIdsRef.current.add(taskId);
+            try {
+              if (nextJob.status === "succeeded") {
+                await successHandlerRef.current?.(nextJob.result || {});
+              } else {
+                await unsuccessfulTerminalHandlerRef.current?.(nextJob);
+              }
+            } catch (handlerError) {
+              console.error("background job terminal handler failed:", handlerError);
+            }
           }
           return;
         }
@@ -71,8 +82,9 @@ export default function useBackgroundJob(storageKey, onSucceeded) {
 
   useEffect(() => {
     successHandlerRef.current = onSucceeded;
+    unsuccessfulTerminalHandlerRef.current = onUnsuccessfulTerminal;
     pollRef.current = poll;
-  }, [onSucceeded, poll]);
+  }, [onSucceeded, onUnsuccessfulTerminal, poll]);
 
   const createJob = useCallback(
     async (path, payload, idempotencyPrefix) => {

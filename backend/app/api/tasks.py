@@ -10,7 +10,8 @@ from app.core.config import settings
 from app.core.input_validation import validate_safe_text
 from app.core.security import get_current_admin, get_current_user
 from app.db.database import get_db
-from app.db.models import User
+from app.db.models import InterviewTurn, User
+from app.schemas.interview_training import InterviewAnswerRequest
 from app.services.background_job_service import (
     BackgroundJobError,
     cancel_background_job,
@@ -68,21 +69,8 @@ class ResumeJobRequest(SessionJobRequest):
     project_file_ids: list[str] = Field(default_factory=list, max_length=20)
 
 
-class InterviewEvaluationJobRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+class InterviewEvaluationJobRequest(InterviewAnswerRequest):
     session_id: int = Field(gt=0)
-    turn_id: int = Field(gt=0)
-    answer: str
-
-    @field_validator("answer")
-    @classmethod
-    def validate_answer(cls, value: str) -> str:
-        return validate_safe_text(
-            value,
-            field_name="面试回答",
-            max_chars=settings.max_interview_answer_chars,
-            strip=True,
-        )
 
 
 def _raise_job_error(error: Exception) -> None:
@@ -190,6 +178,19 @@ def create_interview_evaluation_job(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    conflicting_answer = (
+        db.query(InterviewTurn.id)
+        .filter(
+            InterviewTurn.id == request.turn_id,
+            InterviewTurn.session_id == request.session_id,
+            InterviewTurn.user_id == current_user.id,
+            InterviewTurn.user_answer.is_not(None),
+            InterviewTurn.user_answer != request.answer,
+        )
+        .first()
+    )
+    if conflicting_answer is not None:
+        raise HTTPException(status_code=409, detail="该题目已经回答")
     try:
         job, created = create_background_job(
             db,
