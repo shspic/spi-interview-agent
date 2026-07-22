@@ -157,6 +157,8 @@ def test_cancel_releases_reserved_quota_once(db_session):
 
 def test_expired_lease_is_recovered_then_exhausted(db_session):
     user = create_user(db_session, "lease_owner")
+    user.is_quota_exempt = True
+    db_session.commit()
     job, _ = create_background_job(
         db_session,
         user_id=user.id,

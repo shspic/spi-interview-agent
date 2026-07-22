@@ -35,7 +35,7 @@ export async function installApiMock(page, options = {}) {
   };
   await page.context().addCookies([{ name: "spi_csrf", value: "fixture-csrf", domain: "127.0.0.1", path: "/" }]);
 
-  const user = () => ({ id: state.admin ? 1 : 2, username: state.admin ? "demo_admin" : "demo_user", is_admin: state.admin, is_active: true, created_at: now, last_login_at: now });
+  const user = () => ({ id: state.admin ? 1 : 2, username: state.admin ? "demo_admin" : "demo_user", is_admin: state.admin, is_quota_exempt: Boolean(options.quotaExempt), is_active: true, created_at: now, last_login_at: now });
   const profile = { display_name: "演示用户", target_direction: "Python 后端", self_introduction: "专注可靠的 AI 应用工程。", technical_skills: ["Python", "FastAPI", "PostgreSQL"] };
   const targetJobs = [{ id: 10, job_title: "Python 后端工程师", company_name: "虚构科技", jd_text: "负责 API 与异步任务系统。", notes: "", is_active: true }];
   const interviewQuestion = { id: 70, session_id: 7, question: "请介绍一次你处理后台任务可靠性的经历。", sequence_number: 1, main_question_number: 1, follow_up_number: 0, question_type: "main" };
@@ -121,7 +121,7 @@ export async function installApiMock(page, options = {}) {
     if (path.startsWith("/api/tasks/") && path.endsWith("/cancel")) return json(route, task("cancelled"));
     if (path === "/api/tasks/interview-evaluation" && method === "POST") { const payload = request.postDataJSON(); state.evaluationRequests += 1; state.evaluationCsrfHeader = request.headers()["x-csrf-token"] || null; state.answerSubmitted = true; state.submittedAnswer = payload.answer; return json(route, task("queued"), 202); }
     if (path.startsWith("/api/tasks/") && method === "POST") return json(route, task("queued"), 202);
-    if (path === "/api/usage/me") return json(route, { current_date: "2026-07-20", timezone: "Asia/Shanghai", items: [{ usage_type: "interview_evaluation", display_name: "面试评价", used: 1, reserved: 0, limit: 10, remaining: 9, reset_at: "2026-07-21T00:00:00+08:00" }] });
+    if (path === "/api/usage/me") return json(route, { current_date: "2026-07-20", timezone: "Asia/Shanghai", items: [{ usage_type: "interview_evaluation", display_name: "面试评价", used: 1, reserved: 0, unlimited: Boolean(options.quotaExempt), limit: options.quotaExempt ? null : 10, remaining: options.quotaExempt ? null : 9, reset_at: "2026-07-21T00:00:00+08:00" }] });
     if (path === "/api/admin/usage/summary") return json(route, { registered_user_count: 2, active_user_count: 2, agent_run_count: 3, average_latency_ms: 120, business_usage: {}, event_status_counts: {}, daily_trend: [], agent_runs_by_name: {}, recent_failure_types: [] });
     if (path === "/api/admin/background-jobs") return json(route, { items: [], total: 0, page: 1, page_size: 20 });
     if (path === "/api/admin/workers") return json(route, { online_count: 1, offline_count: 0, stopped_count: 0, workers: [{ label: "Worker 1", state: "online", database_type: "postgresql", started_at: now, last_seen_at: now, stopped_at: null }] });

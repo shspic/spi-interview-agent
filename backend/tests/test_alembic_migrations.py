@@ -17,6 +17,18 @@ def test_baseline_upgrade_downgrade_and_reupgrade(tmp_path):
     url = sqlite_url(database_path)
     config = alembic_config(url)
 
+    command.upgrade(config, "20260720_0002")
+    engine = create_engine(url)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO users "
+                "(username, password_hash, is_active, is_admin, created_at) "
+                "VALUES ('existing-user', 'unused', 1, 0, '2026-07-22T00:00:00')"
+            )
+        )
+    engine.dispose()
+
     command.upgrade(config, "head")
     engine = create_engine(url)
     try:
@@ -33,6 +45,13 @@ def test_baseline_upgrade_downgrade_and_reupgrade(tmp_path):
             "worker_heartbeats",
             "maintenance_states",
         } <= tables
+        with engine.connect() as connection:
+            assert connection.execute(
+                text(
+                    "SELECT is_quota_exempt FROM users "
+                    "WHERE username = 'existing-user'"
+                )
+            ).scalar_one() in (False, 0)
         assert compare_schema(engine, Base.metadata) == []
         assert get_schema_status(engine).ready is True
     finally:

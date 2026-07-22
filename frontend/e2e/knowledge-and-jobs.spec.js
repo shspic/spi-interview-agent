@@ -35,6 +35,7 @@ test("后台任务超时显示可恢复操作，终态停止轮询", async ({ pa
 test("不支持类型和超大文件在请求前给出明确错误", async ({ page }) => {
   await installApiMock(page);
   await page.goto("/knowledge");
+  await expect(page.getByText("知识库状态刷新成功。")).toBeVisible();
   await page.locator("#file-input").setInputFiles({ name: "unsafe.csv", mimeType: "text/csv", buffer: Buffer.from("a,b") });
   await expect(page.getByText("仅可上传 PDF、TXT 或 MD")).toBeVisible();
   await page.locator("#file-input").setInputFiles({ name: "oversize.txt", mimeType: "text/plain", buffer: Buffer.alloc(20 * 1024 * 1024 + 1) });

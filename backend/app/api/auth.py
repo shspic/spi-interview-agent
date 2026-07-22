@@ -72,6 +72,7 @@ def user_to_dict(user: User) -> dict:
         "username": user.username,
         "is_active": bool(user.is_active),
         "is_admin": bool(user.is_admin),
+        "is_quota_exempt": bool(user.is_quota_exempt),
         "created_at": user.created_at,
         "last_login_at": user.last_login_at,
     }
@@ -165,6 +166,7 @@ def register_user(
         password_hash=hash_password(request.password),
         is_active=True,
         is_admin=False,
+        is_quota_exempt=False,
         created_at=datetime.now().isoformat(timespec="seconds"),
         last_login_at=None,
     )

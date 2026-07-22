@@ -24,6 +24,12 @@ class User(Base):
     password_hash = Column(Text, nullable=False)
     is_active = Column(Boolean, nullable=False, default=True)
     is_admin = Column(Boolean, nullable=False, default=False)
+    is_quota_exempt = Column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=text("false"),
+    )
     created_at = Column(Text, nullable=False)
     last_login_at = Column(Text, nullable=True)
     profile = relationship(

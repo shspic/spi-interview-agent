@@ -64,6 +64,15 @@ test("普通用户直接访问管理员路由得到 403 页面", async ({ page }
   await expect(page.getByRole("button", { name: "后台任务与 Worker" })).toHaveCount(0);
 });
 
+test("额度豁免用户仍不能访问管理员页面，且用量页显示无限", async ({ page }) => {
+  await installApiMock(page, { authenticated: true, admin: false, quotaExempt: true });
+  await page.goto("/admin");
+  await expect(page.getByText("无权访问管理后台")).toBeVisible();
+  await page.goto("/usage");
+  await expect(page.getByText("无限").first()).toBeVisible();
+  await expect(page.getByText("管理员后台")).toHaveCount(0);
+});
+
 test("管理员可通过正式 URL 查看后台任务与脱敏 Worker 状态", async ({ page }) => {
   await installApiMock(page, { authenticated: true, admin: true });
   await page.goto("/admin");

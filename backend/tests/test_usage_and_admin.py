@@ -21,6 +21,7 @@ from app.db.models import (
 from app.services import admin_service
 from app.services.usage_service import (
     UsageLimitExceeded,
+    UsageReservationConflict,
     commit_usage,
     get_user_usage,
     release_usage,
@@ -33,6 +34,7 @@ def add_user(
     username: str,
     *,
     is_admin: bool = False,
+    is_quota_exempt: bool = False,
     is_active: bool = True,
     password_hash: str = "unused-test-password-hash",
 ) -> User:
@@ -41,6 +43,7 @@ def add_user(
         password_hash=password_hash,
         is_active=is_active,
         is_admin=is_admin,
+        is_quota_exempt=is_quota_exempt,
         created_at=datetime.now().isoformat(timespec="seconds"),
         last_login_at=None,
     )
@@ -103,6 +106,62 @@ def test_reserved_blocks_limit_and_release_restores_capacity(db_session, monkeyp
     recovered = reserve_usage(db_session, user.id, "chat", "second")
     commit_usage(db_session, recovered)
     assert get_user_usage(db_session, user.id)["items"][0]["used"] == 1
+
+
+def test_admin_without_quota_exemption_is_still_limited(
+    client,
+    db_session,
+    monkeypatch,
+):
+    monkeypatch.setattr(settings, "daily_chat_limit", 0)
+    admin = add_user(db_session, "limited_admin", is_admin=True)
+
+    assert client.get(
+        "/api/admin/users",
+        headers=auth_headers(db_session, admin),
+    ).status_code == 200
+    with pytest.raises(UsageLimitExceeded):
+        reserve_usage(db_session, admin.id, "chat", "limited-admin-chat")
+
+
+def test_quota_exempt_user_keeps_accounting_release_and_conflict_semantics(
+    db_session,
+    monkeypatch,
+):
+    monkeypatch.setattr(settings, "daily_chat_limit", 1)
+    monkeypatch.setattr(settings, "daily_job_analysis_limit", 1)
+    monkeypatch.setattr(settings, "daily_interview_evaluation_limit", 1)
+    monkeypatch.setattr(settings, "daily_multi_agent_task_limit", 1)
+    user = add_user(db_session, "unlimited_user", is_quota_exempt=True)
+    usage_types = (
+        "chat",
+        "job_analysis",
+        "interview_evaluation",
+        "multi_agent_task",
+    )
+
+    for usage_type in usage_types:
+        first = reserve_usage(db_session, user.id, usage_type, f"{usage_type}-1")
+        commit_usage(db_session, first)
+        failed = reserve_usage(db_session, user.id, usage_type, f"{usage_type}-failed")
+        with pytest.raises(UsageReservationConflict):
+            reserve_usage(db_session, user.id, usage_type, f"{usage_type}-failed")
+        release_usage(db_session, failed, "TestFailure")
+        second = reserve_usage(db_session, user.id, usage_type, f"{usage_type}-2")
+        commit_usage(db_session, second)
+
+    usage = {item["usage_type"]: item for item in get_user_usage(db_session, user.id)["items"]}
+    assert set(usage) == set(usage_types)
+    assert all(item["unlimited"] is True for item in usage.values())
+    assert all(item["limit"] is None for item in usage.values())
+    assert all(item["remaining"] is None for item in usage.values())
+    assert all(item["used"] == 2 for item in usage.values())
+    assert all(item["reserved"] == 0 for item in usage.values())
+    assert db_session.query(UsageEvent).filter_by(user_id=user.id).count() == 12
+    assert db_session.query(UsageEvent).filter_by(
+        user_id=user.id,
+        status="failed",
+    ).count() == 4
 
 
 def test_usage_is_recalculated_for_new_natural_day(db_session, monkeypatch):
@@ -270,7 +329,7 @@ def test_admin_access_user_list_and_disable_invalidates_existing_jwt(
     assert client.patch(
         f"/api/admin/users/{user.id}/status",
         headers=admin_headers,
-        json={"is_active": True, "is_admin": True},
+        json={"is_active": True, "is_admin": True, "is_quota_exempt": True},
     ).status_code == 422
     assert db_session.query(AdminAuditLog).filter_by(
         action="disable_user",

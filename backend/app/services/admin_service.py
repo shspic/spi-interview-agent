@@ -55,6 +55,7 @@ def get_admin_user_summary(db: Session, user: User) -> dict:
         "username": user.username,
         "is_active": bool(user.is_active),
         "is_admin": bool(user.is_admin),
+        "is_quota_exempt": bool(user.is_quota_exempt),
         "created_at": user.created_at,
         "last_login_at": user.last_login_at,
         "today_usage": get_user_usage(db, user.id)["items"],

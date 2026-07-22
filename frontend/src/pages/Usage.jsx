@@ -53,9 +53,10 @@ function Usage() {
       ) : usage?.items?.length ? (
         <div className="usage-grid">
           {usage.items.map((item) => {
+            const unlimited = Boolean(item.unlimited);
             const occupied = Number(item.used || 0) + Number(item.reserved || 0);
-            const percent = item.limit > 0 ? Math.min(100, (occupied / item.limit) * 100) : 0;
-            const exhausted = item.remaining === 0;
+            const percent = !unlimited && item.limit > 0 ? Math.min(100, (occupied / item.limit) * 100) : 0;
+            const exhausted = !unlimited && item.remaining === 0;
             const nearLimit = !exhausted && item.limit > 0 && occupied / item.limit >= 0.8;
             return (
               <article key={item.usage_type} className={`usage-card${exhausted ? " exhausted" : ""}`}>
@@ -64,7 +65,7 @@ function Usage() {
                     <span>{item.usage_type}</span>
                     <h2>{item.display_name || item.usage_type}</h2>
                   </div>
-                  <strong>{exhausted ? "今日额度已用完" : nearLimit ? "接近上限" : "可用"}</strong>
+                  <strong>{unlimited ? "无限" : exhausted ? "今日额度已用完" : nearLimit ? "接近上限" : "可用"}</strong>
                 </div>
                 <div className="usage-progress" aria-label={`${item.display_name}用量`}>
                   <span style={{ width: `${percent}%` }} />
@@ -72,8 +73,8 @@ function Usage() {
                 <dl className="usage-metrics">
                   <div><dt>已使用</dt><dd>{item.used}</dd></div>
                   <div><dt>执行中</dt><dd>{item.reserved}</dd></div>
-                  <div><dt>每日上限</dt><dd>{item.limit}</dd></div>
-                  <div><dt>剩余</dt><dd>{item.remaining}</dd></div>
+                  <div><dt>每日上限</dt><dd>{unlimited ? "无限" : item.limit}</dd></div>
+                  <div><dt>剩余</dt><dd>{unlimited ? "无限" : item.remaining}</dd></div>
                 </dl>
                 <p>重置时间：{formatDateTime(item.reset_at)}</p>
               </article>
