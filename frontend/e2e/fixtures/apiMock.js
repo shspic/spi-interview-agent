@@ -15,6 +15,14 @@ export async function installApiMock(page, options = {}) {
     current_main_question: 1,
     selected_project_file_ids: [],
   };
+  const completedInterviewSession = {
+    ...initialInterviewSession,
+    status: "completed",
+    completed_at: now,
+    overall_score: 78,
+    summary: "已完成渐进式项目追问。",
+    dimension_scores: {},
+  };
   const state = {
     authenticated: options.authenticated ?? true,
     admin: options.admin ?? false,
@@ -31,7 +39,9 @@ export async function installApiMock(page, options = {}) {
     evaluationCsrfHeader: null,
     answerSubmitted: false,
     submittedAnswer: "",
-    sessions: interviewEvaluation ? [initialInterviewSession] : [],
+    sessions: options.completedQuestionHistory
+      ? [completedInterviewSession]
+      : interviewEvaluation ? [initialInterviewSession] : [],
   };
   await page.context().addCookies([{ name: "spi_csrf", value: "fixture-csrf", domain: "127.0.0.1", path: "/" }]);
 
@@ -40,6 +50,7 @@ export async function installApiMock(page, options = {}) {
   const targetJobs = [{ id: 10, job_title: "Python 后端工程师", company_name: "虚构科技", jd_text: "负责 API 与异步任务系统。", notes: "", is_active: true }];
   const interviewQuestion = { id: 70, session_id: 7, question: "请介绍一次你处理后台任务可靠性的经历。", sequence_number: 1, main_question_number: 1, follow_up_number: 0, question_type: "main" };
   const followUpQuestion = { id: 71, session_id: 7, question: "你如何验证任务不会被重复执行？", sequence_number: 2, main_question_number: 1, follow_up_number: 1, question_type: "follow_up" };
+  const secondFollowUpQuestion = { id: 72, session_id: 7, question: "该方案上线后的结果通过什么证据得到确认？", sequence_number: 3, main_question_number: 1, follow_up_number: 2, question_type: "follow_up" };
   const task = (status = state.jobStatus) => ({
     task_id: "fixture-task-1",
     task_type: interviewEvaluation ? "interview_evaluation" : "knowledge_rebuild",
@@ -54,6 +65,30 @@ export async function installApiMock(page, options = {}) {
   });
 
   const sessionDetail = () => {
+    if (options.completedQuestionHistory) {
+      const scoredTurn = (turn) => ({
+        ...turn,
+        user_answer: "基于真实经历作答。",
+        technical_accuracy_score: 80,
+        evidence_consistency_score: 80,
+        answer_depth_score: 75,
+        expression_structure_score: 80,
+        job_match_score: 75,
+        total_score: 78,
+        evaluation_summary: "回答已评价。",
+        optimized_answer: "基于真实经历作答。",
+      });
+      return {
+        ...completedInterviewSession,
+        completed_main_questions: 1,
+        current_follow_up_count: 2,
+        evidence_limited: false,
+        target_job: targetJobs[0],
+        current_question: null,
+        turns: [interviewQuestion, followUpQuestion, secondFollowUpQuestion].map(scoredTurn),
+        improvement_tasks: [],
+      };
+    }
     const successfulEvaluation = state.answerSubmitted && state.jobStatus === "succeeded";
     const answeredTurn = {
       ...interviewQuestion,

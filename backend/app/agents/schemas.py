@@ -2,6 +2,8 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.agents.question_progression import QuestionIntent
+
 
 class AgentSchema(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -101,12 +103,27 @@ class SupervisorDecisionOutput(AgentSchema):
     reason: str = Field(min_length=1, max_length=500)
 
 
+class InterviewHistoryItem(AgentSchema):
+    main_question_number: int = Field(gt=0)
+    follow_up_number: int = Field(ge=0, le=2)
+    question: str
+    answer: str | None = None
+    evaluation_summary: str | None = None
+    evidence_conflicts: list[dict] = Field(default_factory=list, max_length=20)
+
+
 class InterviewerInput(AgentSchema):
     action: Literal["main_question", "follow_up"]
     mode: Literal["quick", "standard", "deep_dive"]
     main_question_number: int = Field(gt=0)
     plan: InterviewPlanOutput
     evidence: EvidenceOutput
+    history: list[InterviewHistoryItem] = Field(default_factory=list, max_length=30)
+    asked_questions: list[str] = Field(default_factory=list, max_length=30)
+    current_answer: str | None = None
+    previous_evaluation: SupervisorEvaluationSummary | None = None
+    covered_intents: list[QuestionIntent] = Field(default_factory=list, max_length=7)
+    target_intent: QuestionIntent
     previous_question: str | None = None
     previous_answer: str | None = None
     follow_up_reason: str | None = None

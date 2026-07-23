@@ -142,9 +142,26 @@ class EvaluationFlowLLM:
                 and self.interviewer_calls > self.fail_interviewer_after
             ):
                 return "invalid interviewer"
+            intent_questions = {
+                "project_background": "请说明这段真实项目的项目背景和当时目标。",
+                "personal_responsibility": "在这段经历中，哪些工作由你亲自负责？",
+                "technical_decision": "请说明一个具体技术决策及其取舍依据。",
+                "challenge_solution": "最棘手的难点是什么，请说明实际解决步骤。",
+                "verifiable_result": "最终结果如何被验证？",
+                "collaboration_reflection": "请说明一次真实协作或复盘。",
+                "role_expertise": "这段经历体现了哪项岗位能力？",
+            }
+            target_intent = next(
+                (
+                    intent
+                    for intent in intent_questions
+                    if f'"intent": "{intent}"' in user_message
+                ),
+                "project_background",
+            )
             return json.dumps(
                 {
-                    "question": f"Generated evaluation question {self.interviewer_calls}?",
+                    "question": intent_questions[target_intent],
                     "rationale": "grounded",
                     "evidence_limited": False,
                 },

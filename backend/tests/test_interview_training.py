@@ -346,6 +346,30 @@ def test_main_question_allows_at_most_two_follow_ups(client, db_session):
     assert error.value.status_code == 409
 
 
+def test_question_text_duplicate_is_rejected_before_turn_is_saved(client, db_session):
+    headers, user_id = register_and_login(client, "alice")
+    session_id = create_session(client, headers).json()["id"]
+    main_turn = create_interview_turn(
+        db_session,
+        user_id,
+        session_id,
+        question="请说明你的个人职责，以及最终结果。",
+        main_question_number=1,
+    )
+
+    with pytest.raises(InterviewTrainingServiceError) as error:
+        create_interview_turn(
+            db_session,
+            user_id,
+            session_id,
+            question="  请说明你的个人职责, 以及最终结果!  ",
+            parent_turn_id=main_turn.id,
+        )
+
+    assert error.value.status_code == 409
+    assert db_session.query(InterviewTurn).filter_by(session_id=session_id).count() == 1
+
+
 def test_parent_turn_cannot_cross_sessions(client, db_session):
     headers, user_id = register_and_login(client, "alice")
     first_session_id = create_session(client, headers).json()["id"]

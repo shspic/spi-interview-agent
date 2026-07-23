@@ -36,6 +36,28 @@ test("评价成功仍只执行一次成功刷新并展示结果", async ({ page 
   expect(state.sessionDetailRequests).toBe(2);
 });
 
+test("主问题和两次追问按各自 Turn 展示不同内容", async ({ page }) => {
+  await page.addInitScript(() => {
+    window.localStorage.setItem("spi_interview_active_session", "7");
+  });
+  await installApiMock(page, { completedQuestionHistory: true });
+
+  await page.goto("/interview");
+  await expect(
+    page.getByText("请介绍一次你处理后台任务可靠性的经历。"),
+  ).toBeVisible();
+
+  const questions = await page.locator("article.turn-review > h4").allTextContents();
+  expect(questions).toEqual([
+    "请介绍一次你处理后台任务可靠性的经历。",
+    "你如何验证任务不会被重复执行？",
+    "该方案上线后的结果通过什么证据得到确认？",
+  ]);
+  expect(new Set(questions).size).toBe(3);
+  await expect(page.getByText("追问 1", { exact: true })).toBeVisible();
+  await expect(page.getByText("追问 2", { exact: true })).toBeVisible();
+});
+
 for (const terminal of [
   { status: "failed", label: "执行失败" },
   { status: "timed_out", label: "已超时" },
