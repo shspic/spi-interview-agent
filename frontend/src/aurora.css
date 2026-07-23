@@ -182,3 +182,892 @@ body {
     min-height: 44px;
   }
 }
+
+/* 认证舱叙事：内容独立于视频，视频失败时仍保留完整信息。 */
+.auth-viewport {
+  justify-content: stretch;
+}
+
+.auth-viewport-media {
+  position: absolute;
+  inset: 0;
+}
+
+.auth-viewport-content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  min-height: 100%;
+  flex-direction: column;
+}
+
+.auth-story {
+  width: min(620px, 92%);
+  margin-top: clamp(44px, 8vh, 96px);
+}
+
+.auth-story h1 {
+  max-width: 15ch;
+  margin: 0;
+  color: var(--aurora-text);
+  font-size: clamp(30px, 3.2vw, 46px);
+  line-height: 1.22;
+  text-wrap: balance;
+}
+
+.auth-story p {
+  max-width: 58ch;
+  margin: 22px 0 0;
+  color: #c9dce1;
+  font-size: 15px;
+  line-height: 1.9;
+}
+
+.auth-feature-window {
+  width: min(640px, 94%);
+  height: 168px;
+  margin-top: clamp(28px, 5vh, 52px);
+  padding: 10px 16px;
+  overflow: hidden;
+  border: 1px solid var(--aurora-line);
+  border-radius: var(--aurora-radius);
+  background: rgba(5, 14, 21, 0.7);
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.03);
+}
+
+.auth-feature-list {
+  display: grid;
+  gap: 10px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+  animation: aurora-feature-drift 24s ease-in-out infinite alternate;
+}
+
+.auth-feature-window:hover .auth-feature-list,
+.auth-feature-window:focus-within .auth-feature-list {
+  animation-play-state: paused;
+}
+
+.auth-feature-list li {
+  display: grid;
+  min-height: 44px;
+  grid-template-columns: 34px minmax(0, 1fr);
+  align-items: center;
+  color: var(--aurora-text);
+  line-height: 1.55;
+}
+
+.auth-feature-list li span {
+  color: var(--color-cyan-glow);
+  font: 11px/1 "JetBrains Mono", Consolas, monospace;
+  letter-spacing: 0.08em;
+}
+
+.auth-viewport-code {
+  margin: auto 0 0;
+  padding-top: 24px;
+  color: #93aeb7;
+  font: 11px/1.6 "JetBrains Mono", Consolas, monospace;
+  letter-spacing: 0.1em;
+}
+
+@keyframes aurora-feature-drift {
+  0%,
+  18% { transform: translateY(0); }
+  82%,
+  100% { transform: translateY(-102px); }
+}
+
+/* 通用控件状态与危险操作。 */
+input::placeholder,
+textarea::placeholder {
+  color: #8199a2;
+  opacity: 1;
+}
+
+select {
+  color-scheme: dark;
+}
+
+select option {
+  color: var(--aurora-text);
+  background: var(--color-hull);
+}
+
+button:disabled,
+input:disabled,
+textarea:disabled,
+select:disabled {
+  cursor: not-allowed;
+  opacity: 0.64;
+}
+
+.secondary-button,
+.pagination button,
+.filter-toolbar .secondary-button,
+.dialog-actions .secondary-button {
+  color: var(--aurora-text);
+  background: rgba(17, 38, 50, 0.9);
+  border-color: var(--aurora-line-strong);
+}
+
+.danger-button,
+.danger-link,
+.row-actions .danger-link {
+  color: #ffd9dd;
+  background: rgba(125, 24, 38, 0.34);
+  border: 1px solid rgba(255, 107, 120, 0.58);
+  box-shadow: none;
+}
+
+.danger-button:hover:not(:disabled),
+.danger-link:hover:not(:disabled),
+.row-actions .danger-link:hover:not(:disabled) {
+  color: #fff2f3;
+  background: rgba(170, 35, 52, 0.54);
+  border-color: var(--aurora-danger);
+}
+
+.danger-button:focus-visible,
+.danger-link:focus-visible {
+  outline-color: rgba(255, 107, 120, 0.92);
+  box-shadow: 0 0 0 4px rgba(255, 107, 120, 0.14);
+}
+
+.danger-button:active:not(:disabled),
+.danger-link:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.danger-button:disabled,
+.danger-link:disabled {
+  color: #d7aeb3;
+  background: rgba(92, 31, 41, 0.28);
+  border-color: rgba(255, 107, 120, 0.3);
+  opacity: 0.72;
+}
+
+/* 可复用任务 Loader，只展示真实阶段，不伪造百分比。 */
+.aurora-task-loader {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 13px 14px;
+  margin-top: 12px;
+  border: 1px solid var(--aurora-line-strong);
+  border-radius: var(--aurora-radius-sm);
+  color: var(--aurora-text);
+  background: rgba(8, 28, 38, 0.94);
+}
+
+.aurora-loader-orbit {
+  position: relative;
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border: 1px solid rgba(77, 216, 230, 0.26);
+  border-top-color: var(--color-cyan-glow);
+  border-radius: 50%;
+  animation: aurora-orbit-spin 2.4s linear infinite;
+}
+
+.aurora-loader-orbit::before {
+  width: 21px;
+  height: 21px;
+  border: 1px solid rgba(255, 183, 101, 0.42);
+  border-right-color: var(--color-amber-warm);
+  border-radius: 50%;
+  content: "";
+  animation: aurora-orbit-spin 3.2s linear infinite reverse;
+}
+
+.aurora-loader-orbit span {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-neon-green);
+  box-shadow: 0 0 12px rgba(124, 255, 158, 0.44);
+}
+
+.aurora-loader-copy {
+  display: grid;
+  gap: 3px;
+}
+
+.aurora-loader-copy strong {
+  color: var(--aurora-text);
+}
+
+.aurora-loader-copy small {
+  color: var(--aurora-text-secondary);
+  line-height: 1.5;
+}
+
+@keyframes aurora-orbit-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* 页面内提示与后台任务。 */
+.message-text,
+.workspace-message,
+.inline-success,
+.operation-result.success {
+  color: #caffd6;
+  background: rgba(20, 83, 61, 0.42);
+  border: 1px solid rgba(124, 255, 158, 0.3);
+}
+
+.workspace-message button {
+  color: var(--aurora-text);
+}
+
+.inline-error,
+.error-notice,
+.operation-result.partial,
+.job-failure {
+  color: #ffd9dd;
+  background: rgba(115, 25, 39, 0.38);
+  border: 1px solid rgba(255, 107, 120, 0.34);
+}
+
+.inline-warning,
+.interview-alert.warning {
+  color: #ffe1b8;
+  background: rgba(91, 59, 20, 0.48);
+  border-color: rgba(255, 183, 101, 0.4);
+}
+
+.interview-alert.danger {
+  color: #ffd9dd;
+  background: rgba(115, 25, 39, 0.38);
+  border-color: rgba(255, 107, 120, 0.42);
+}
+
+.background-job-card,
+.job-center-panel,
+.worker-card {
+  color: var(--aurora-text);
+  background: var(--color-panel);
+  border-color: var(--aurora-line);
+}
+
+.background-job-card p,
+.background-job-card small,
+.worker-card p,
+.table-error-summary {
+  color: var(--aurora-text-secondary);
+}
+
+.job-progress,
+.usage-progress,
+.score-track,
+.task-progress-track,
+.comparison-bar {
+  background: rgba(175, 197, 204, 0.14);
+}
+
+/* 面试任务舰桥。 */
+.interview-agent-heading h1,
+.inline-heading h2,
+.inline-heading h3,
+.workspace-header h2,
+.question-card h3,
+.interview-setup-form label,
+.interview-setup-form legend,
+.answer-form > label {
+  color: var(--aurora-text);
+}
+
+.interview-agent-heading p,
+.inline-heading p,
+.workspace-header p,
+.field-help,
+.hint-text,
+.empty-text,
+.mode-selector span,
+.project-file-picker > p {
+  color: var(--aurora-text-secondary);
+}
+
+.interview-section-tabs {
+  border-color: var(--aurora-line);
+  background: rgba(8, 23, 32, 0.9);
+}
+
+.interview-section-tabs button {
+  color: #b9cdd3;
+  background: transparent;
+}
+
+.interview-section-tabs button:hover:not(:disabled) {
+  color: var(--aurora-text);
+  background: rgba(77, 216, 230, 0.08);
+}
+
+.interview-section-tabs button.active {
+  color: #071013;
+  background: var(--color-cyan-glow);
+  box-shadow: 0 6px 18px rgba(77, 216, 230, 0.12);
+}
+
+.recent-sessions,
+.interview-setup-form,
+.question-card,
+.evaluation-panel,
+.session-result,
+.resume-description-panel,
+.improvement-task-panel,
+.comparison-panel,
+.draft-recovery-card,
+.preparation-guidance,
+.strategy-panel,
+.retry-confirmation,
+.comparison-empty {
+  color: var(--aurora-text);
+  background: rgba(12, 26, 36, 0.98);
+  border-color: var(--aurora-line);
+  box-shadow: var(--aurora-shadow-soft);
+}
+
+.top-panel h2 {
+  color: var(--aurora-text);
+}
+
+.session-list-item,
+.preparation-status > div,
+.interview-progress > div,
+.dimension-summary-grid > div,
+.mode-selector label,
+.project-file-picker label,
+.dimension-score-item,
+.evaluation-grid > div,
+.turn-review,
+.improvement-task,
+.comparison-overall > div,
+.resume-version-list > button {
+  color: var(--aurora-text);
+  background: rgba(17, 38, 50, 0.88);
+  border-color: var(--aurora-line);
+}
+
+.session-list-item.active,
+.mode-selector label.active,
+.resume-version-list > button.active {
+  color: var(--aurora-text);
+  background: rgba(77, 216, 230, 0.09);
+  border-color: var(--color-cyan-glow);
+}
+
+.session-select {
+  color: var(--aurora-text);
+}
+
+.session-select p,
+.session-select > span,
+.recent-sessions > .inline-heading span,
+.interview-progress span,
+.dimension-summary-grid span,
+.dimension-score-item span,
+.answer-form-footer > span {
+  color: var(--aurora-text-secondary);
+}
+
+.session-delete-button.danger-button {
+  width: 52px;
+  min-height: 100%;
+  padding: 0 6px;
+  border-width: 0 0 0 1px;
+  border-left-color: rgba(255, 107, 120, 0.42);
+  border-radius: 0;
+}
+
+.preparation-status .complete strong,
+.status-badge.completed,
+.status-badge.success,
+.status-badge.online {
+  color: var(--color-neon-green);
+}
+
+.preparation-status .pending strong,
+.status-badge.draft,
+.status-badge.warning {
+  color: var(--color-amber-warm);
+}
+
+.status-badge.completed,
+.status-badge.success,
+.status-badge.online {
+  background: rgba(38, 106, 68, 0.46);
+}
+
+.status-badge.draft,
+.status-badge.warning,
+.status-badge.timed_out,
+.status-badge.offline {
+  color: var(--color-amber-warm);
+  background: rgba(99, 62, 20, 0.48);
+}
+
+.status-badge.in_progress,
+.status-badge.in-progress,
+.status-badge.queued,
+.status-badge.running,
+.status-badge.retry_wait {
+  color: #9cebf3;
+  background: rgba(27, 107, 122, 0.46);
+}
+
+.status-badge.cancelled,
+.status-badge.failed,
+.status-badge.stopped {
+  color: #ffb6bd;
+  background: rgba(115, 25, 39, 0.42);
+}
+
+.project-file-picker label {
+  min-height: 44px;
+  overflow-wrap: anywhere;
+}
+
+.project-file-picker input,
+.mode-selector input,
+.task-check input,
+.checkbox-row input,
+.job-active-option input {
+  accent-color: var(--color-cyan-glow);
+}
+
+.project-file-picker input:focus-visible,
+.mode-selector input:focus-visible,
+.task-check input:focus-visible,
+.checkbox-row input:focus-visible,
+.job-active-option input:focus-visible {
+  outline: 2px solid var(--color-cyan-glow);
+  outline-offset: 3px;
+}
+
+.decision-note,
+.one-line-summary,
+.overall-score,
+.completion-criteria,
+.improvement-task.completed {
+  color: var(--aurora-text);
+  background: rgba(17, 38, 50, 0.78);
+}
+
+.improvement-task.completed {
+  opacity: 0.78;
+}
+
+.priority-badge.high {
+  color: #ffbdc3;
+  background: rgba(115, 25, 39, 0.42);
+}
+
+.priority-badge.medium {
+  color: #ffd59f;
+  background: rgba(99, 62, 20, 0.46);
+}
+
+.priority-badge.low {
+  color: #b9ffca;
+  background: rgba(38, 106, 68, 0.42);
+}
+
+/* 知识库与历史表格。 */
+.drop-zone,
+.upload-limits > * {
+  color: var(--aurora-text);
+  background: var(--color-panel);
+  border-color: var(--aurora-line);
+}
+
+.drop-zone.is-dragging {
+  background: rgba(77, 216, 230, 0.1);
+  border-color: var(--color-cyan-glow);
+}
+
+.status-box {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+  color: var(--aurora-text);
+  background: rgba(12, 26, 36, 0.98);
+  border-color: var(--aurora-line);
+}
+
+.status-box h2 {
+  grid-column: 1 / -1;
+  color: var(--aurora-text);
+}
+
+.status-box p {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 12px;
+  margin: 0;
+  color: var(--aurora-text-secondary);
+  background: var(--color-panel);
+  border: 1px solid var(--aurora-line);
+  border-radius: var(--aurora-radius-sm);
+}
+
+.status-box strong {
+  color: var(--aurora-text);
+  font-size: 20px;
+  overflow-wrap: anywhere;
+}
+
+.table-scroll,
+.admin-table-scroll {
+  max-width: 100%;
+  border: 1px solid var(--aurora-line);
+  border-radius: var(--aurora-radius);
+  background: var(--color-deck);
+  overflow-x: auto;
+}
+
+.file-table,
+.admin-table {
+  color: var(--aurora-text);
+  background: var(--color-deck);
+}
+
+.file-table th,
+.admin-table th {
+  color: #c9dce1;
+  background: var(--color-hull);
+  border-bottom-color: var(--aurora-line-strong);
+}
+
+.file-table td,
+.admin-table td {
+  color: var(--aurora-text);
+  background: var(--color-deck);
+  border-bottom-color: var(--aurora-line);
+}
+
+.file-table tbody tr:hover td,
+.admin-table tbody tr:hover td {
+  background: rgba(77, 216, 230, 0.055);
+}
+
+.long-cell,
+.summary-cell {
+  overflow-wrap: anywhere;
+}
+
+.history-tabs button {
+  min-height: 44px;
+  color: #c4d7dc;
+  background: rgba(17, 38, 50, 0.88);
+  border-color: var(--aurora-line-strong);
+}
+
+.history-tabs button:hover:not(:disabled) {
+  color: var(--aurora-text);
+  background: rgba(77, 216, 230, 0.1);
+}
+
+.history-tabs .active-tab {
+  color: #071013;
+  background: var(--color-cyan-glow);
+  border-color: var(--color-cyan-glow);
+}
+
+.history-detail-card,
+.detail-block,
+.answer-content,
+.score-grid > div,
+.detail-grid > * {
+  color: var(--aurora-text);
+  background: rgba(17, 38, 50, 0.72);
+  border-color: var(--aurora-line);
+}
+
+/* 个人资料、用量、设置与管理后台。 */
+.profile-completion > div,
+.target-job-item,
+.profile-file-groups > div,
+.usage-card,
+.settings-section,
+.admin-subpanel,
+.admin-metric-grid article,
+.filter-toolbar,
+.confirmation-card,
+.cleanup-confirm-panel,
+.resource-count-grid > div,
+.usage-grid.compact > div,
+.usage-metrics > div,
+.account-detail-grid > div {
+  color: var(--aurora-text);
+  background: rgba(17, 38, 50, 0.88);
+  border-color: var(--aurora-line);
+}
+
+.profile-section,
+.section-heading,
+.summary-list > div,
+.failure-line {
+  border-color: var(--aurora-line);
+}
+
+.profile-section-heading p,
+.target-job-title p,
+.job-jd-preview,
+.job-notes,
+.profile-file-groups li,
+.page-heading-row p,
+.settings-section > p,
+.admin-heading p,
+.usage-card-heading span,
+.usage-card > p,
+.admin-metric-grid span,
+.admin-metric-grid small,
+.usage-metrics dt,
+.account-detail-grid dt,
+.section-heading span,
+.settings-form label,
+.cleanup-confirm-panel label,
+.confirmation-card label,
+.filter-toolbar label,
+.admin-global-controls label,
+.resource-count-grid span,
+.usage-grid.compact span,
+.usage-grid.compact small,
+.failure-line span,
+.loading-line,
+.empty-state {
+  color: var(--aurora-text-secondary);
+}
+
+.profile-form label,
+.target-job-form > label:not(.job-active-option),
+.page-heading-row h1,
+.section-heading h2,
+.admin-subpanel h3,
+.usage-card-heading h2,
+.usage-metrics dd,
+.account-detail-grid dd {
+  color: var(--aurora-text);
+}
+
+.usage-card-heading strong,
+.active-job-note,
+.profile-completion .is-complete strong {
+  color: var(--color-neon-green);
+}
+
+.profile-completion .is-pending strong {
+  color: var(--color-amber-warm);
+}
+
+.usage-metrics > div,
+.account-detail-grid > div,
+.resource-count-grid > div,
+.usage-grid.compact > div {
+  border: 1px solid var(--aurora-line);
+  border-radius: var(--aurora-radius-sm);
+}
+
+.settings-form input,
+.cleanup-confirm-panel input,
+.confirmation-card input,
+.confirmation-card textarea,
+.filter-toolbar input,
+.filter-toolbar select,
+.admin-global-controls input,
+.password-reset-admin select {
+  color: var(--aurora-text);
+  background: #091720;
+  border-color: var(--aurora-line);
+}
+
+.danger-zone {
+  color: var(--aurora-text);
+  background: rgba(57, 20, 29, 0.48);
+  border-color: rgba(255, 107, 120, 0.34);
+}
+
+.admin-tabs {
+  background: rgba(8, 23, 32, 0.92);
+  border-color: var(--aurora-line);
+}
+
+.admin-tabs button {
+  color: #b9cdd3;
+  background: transparent;
+}
+
+.admin-tabs button.active {
+  color: #071013;
+  background: var(--color-cyan-glow);
+}
+
+.admin-table-scroll,
+.confirmation-card {
+  background: var(--color-deck);
+  border: 1px solid var(--aurora-line);
+}
+
+.usage-cell span {
+  color: var(--aurora-text);
+  background: rgba(27, 107, 122, 0.34);
+}
+
+.confirmation-panel {
+  background: rgba(3, 8, 12, 0.8);
+}
+
+@media (max-width: 1100px) {
+  .auth-story {
+    margin-top: 34px;
+  }
+
+  .auth-feature-window {
+    margin-top: 24px;
+  }
+
+  .status-box {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .auth-viewport {
+    min-height: 470px;
+  }
+
+  .auth-story {
+    margin-top: 34px;
+  }
+
+  .auth-story h1 {
+    max-width: 20ch;
+    font-size: clamp(28px, 5vw, 38px);
+  }
+
+  .auth-feature-window {
+    height: 152px;
+  }
+
+  .status-box {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .status-box {
+    grid-template-columns: 1fr;
+  }
+
+  .status-box h2 {
+    grid-column: 1;
+  }
+
+  .file-table {
+    min-width: 680px;
+  }
+}
+
+@media (max-width: 560px) {
+  .auth-viewport {
+    min-height: 320px;
+    padding: 20px;
+  }
+
+  .auth-viewport-content {
+    min-height: 280px;
+  }
+
+  .auth-viewport .brand-lockup img {
+    width: 44px;
+    height: 44px;
+  }
+
+  .auth-viewport .brand-lockup strong {
+    font-size: 19px;
+  }
+
+  .auth-story {
+    width: 100%;
+    margin-top: 24px;
+  }
+
+  .auth-story h1 {
+    max-width: none;
+    font-size: 22px;
+    line-height: 1.35;
+  }
+
+  .auth-story p {
+    display: -webkit-box;
+    margin-top: 12px;
+    overflow: hidden;
+    font-size: 14px;
+    line-height: 1.65;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+  }
+
+  .auth-feature-window {
+    height: auto;
+    margin-top: 14px;
+    padding: 8px 12px;
+    overflow: visible;
+  }
+
+  .auth-feature-list {
+    gap: 4px;
+    animation: none;
+  }
+
+  .auth-feature-list li {
+    min-height: 38px;
+    font-size: 13px;
+  }
+
+  .auth-feature-list li:nth-child(n + 3) {
+    display: none;
+  }
+
+  .auth-viewport-code {
+    display: none;
+  }
+
+  .aurora-task-loader {
+    grid-template-columns: 38px minmax(0, 1fr);
+    padding: 12px;
+  }
+
+  .aurora-loader-copy small {
+    font-size: 12px;
+  }
+
+  .session-list-item {
+    grid-template-columns: minmax(0, 1fr) 56px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-feature-window {
+    height: auto;
+    overflow: visible;
+  }
+
+  .auth-feature-list,
+  .aurora-loader-orbit,
+  .aurora-loader-orbit::before {
+    animation: none;
+    transform: none;
+  }
+
+  .aurora-loader-orbit {
+    border-color: var(--aurora-line-strong);
+  }
+}

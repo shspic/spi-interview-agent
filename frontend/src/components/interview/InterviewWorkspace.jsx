@@ -1,8 +1,9 @@
 import { useState } from "react";
 
+import AuroraTaskLoader from "../AuroraTaskLoader";
 import EvaluationPanel from "./EvaluationPanel";
 
-function InterviewWorkspace({ session, latestResult, busy, recoveryTurn, onSubmit, onContinue, onCopy, onCancel }) {
+function InterviewWorkspace({ session, latestResult, busy, loadingLabel, recoveryTurn, onSubmit, onContinue, onCopy, onCancel }) {
   const [answer, setAnswer] = useState(() => recoveryTurn?.user_answer || "");
   const [validationMessage, setValidationMessage] = useState("");
   const currentQuestion = session.current_question;
@@ -62,13 +63,14 @@ function InterviewWorkspace({ session, latestResult, busy, recoveryTurn, onSubmi
           </div>
           <h3>{turnToAnswer.question}</h3>
           {isRecovery && <div className="interview-alert warning"><strong>{turnToAnswer.total_score == null ? "回答已保存，评价待恢复" : "评价已保存，下一题待恢复"}</strong><p>点击下方按钮将复用后端恢复逻辑，不会重复写入回答或评价。</p></div>}
-          <form className="answer-form" onSubmit={submit}>
+          <form className="answer-form" onSubmit={submit} aria-busy={Boolean(loadingLabel)}>
             <label htmlFor="interview-answer">你的回答</label>
             <textarea id="interview-answer" value={answer} onChange={(event) => setAnswer(event.target.value)} disabled={busy || isRecovery} rows={10} maxLength={20000} placeholder="建议说明背景、你的职责、技术方案、关键取舍和结果。" />
             <div className="answer-form-footer">
               <span>{answer.length}/20000</span>
               <button type="submit" disabled={busy}>{busy ? "处理中..." : isRecovery ? "恢复处理" : "提交回答"}</button>
             </div>
+            <AuroraTaskLoader label={loadingLabel} detail="回答内容会保留在当前输入区，处理完成后自动更新评价。" />
             {validationMessage && <p className="form-error" role="alert">{validationMessage}</p>}
           </form>
         </article>

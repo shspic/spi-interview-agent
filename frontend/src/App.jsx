@@ -113,8 +113,8 @@ function App() {
   }, [pathname]);
 
   useEffect(() => {
-    document.title = `${pageMeta[0]} · AURORA`;
-  }, [pageMeta]);
+    document.title = "AURORA";
+  }, [pathname]);
 
   const go = (path) => {
     setUserMenuOpen(false);

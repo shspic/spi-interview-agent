@@ -1,12 +1,14 @@
 import { useState } from "react";
 
+import AuroraTaskLoader from "../AuroraTaskLoader";
+
 const modes = [
   { value: "quick", title: "快速练习", description: "3 个主问题，适合快速热身。" },
   { value: "standard", title: "标准面试", description: "5 个主问题，覆盖更完整。" },
   { value: "deep_dive", title: "专项深挖", description: "围绕已选项目持续追问。" },
 ];
 
-function InterviewSetup({ targetJobs, projectFiles, activeJob, busy, draftSession, onCreate, onStartDraft }) {
+function InterviewSetup({ targetJobs, projectFiles, activeJob, busy, loadingLabel, draftSession, onCreate, onStartDraft }) {
   const [title, setTitle] = useState("");
   const [mode, setMode] = useState("quick");
   const [targetJobId, setTargetJobId] = useState(activeJob ? String(activeJob.id) : "");
@@ -36,7 +38,7 @@ function InterviewSetup({ targetJobs, projectFiles, activeJob, busy, draftSessio
 
   return (
     <div className="interview-setup-layout">
-      <form className="interview-setup-form" onSubmit={submit}>
+      <form className="interview-setup-form" onSubmit={submit} aria-busy={Boolean(loadingLabel)}>
         <div className="field-group">
           <label htmlFor="session-title">会话标题（可选）</label>
           <input id="session-title" value={title} onChange={(event) => setTitle(event.target.value)} maxLength={200} placeholder="例如：后端开发标准面试" />
@@ -78,6 +80,7 @@ function InterviewSetup({ targetJobs, projectFiles, activeJob, busy, draftSessio
         {projectFiles.length === 0 && mode !== "deep_dive" && <div className="interview-alert warning"><strong>当前证据有限</strong><p>快速或标准面试仍可启动，但问题会更偏开放式，无法充分核对项目细节。</p></div>}
 
         <button type="submit" disabled={busy}>{busy ? "正在创建并启动..." : "创建并开始"}</button>
+        <AuroraTaskLoader label={loadingLabel} />
       </form>
 
       {draftSession && (
