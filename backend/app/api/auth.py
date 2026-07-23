@@ -11,6 +11,7 @@ from app.core.security import (
     create_access_token,
     decode_access_token,
     get_current_user,
+    get_session_user,
     hash_password,
     normalize_username,
     validate_password,
@@ -41,6 +42,11 @@ from app.services.registration_setting_service import (
     verify_registration_invite,
 )
 from app.services.rate_limit_service import enforce_ip_rate_limit, enforce_user_rate_limit
+from app.services.password_reset_service import (
+    ANONYMOUS_RESPONSE,
+    create_password_reset_request,
+    normalize_request_note,
+)
 
 router = APIRouter()
 DUMMY_PASSWORD_HASH = "$2b$12$4FmMnne2zvpIMYOumkZHpOHSi70GDSu5WdT4sqLiUqwI408BO4YNq"
@@ -66,6 +72,18 @@ class ChangePasswordRequest(BaseModel):
     confirm_password: str = Field(max_length=72)
 
 
+class PasswordResetRequestCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    username: str = Field(max_length=64)
+    request_note: str = Field(default="", max_length=2_000)
+
+
+class TemporaryPasswordChangeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    new_password: str = Field(max_length=72)
+    confirm_password: str = Field(max_length=72)
+
+
 def user_to_dict(user: User) -> dict:
     return {
         "id": user.id,
@@ -73,6 +91,7 @@ def user_to_dict(user: User) -> dict:
         "is_active": bool(user.is_active),
         "is_admin": bool(user.is_admin),
         "is_quota_exempt": bool(user.is_quota_exempt),
+        "must_change_password": bool(user.must_change_password),
         "created_at": user.created_at,
         "last_login_at": user.last_login_at,
     }
@@ -206,6 +225,28 @@ def login_user(
             status_code=401,
             detail={"error_code": "account_disabled", "message": "账号已停用"},
         )
+    if user.must_change_password:
+        try:
+            expires_at = datetime.fromisoformat(
+                user.temporary_password_expires_at or ""
+            )
+        except ValueError:
+            expires_at = None
+        if expires_at is None or expires_at <= datetime.now(expires_at.tzinfo):
+            record_auth_event(
+                db,
+                "temporary_password_expired",
+                user_id=user.id,
+                event_status="failed",
+            )
+            db.commit()
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "error_code": "temporary_password_expired",
+                    "message": "临时密码已过期，请重新申请密码重置",
+                },
+            )
 
     auth_session, refresh_token, csrf_token = create_session(db, user)
     access_token = create_access_token(user.id, auth_session.id, auth_session.token_version)
@@ -288,7 +329,7 @@ def logout(request: Request, response: Response, db: Session = Depends(get_db)):
 def logout_all(
     request: Request,
     response: Response,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_session_user),
     db: Session = Depends(get_db),
 ):
     auth_session = request.state.auth_session
@@ -305,9 +346,79 @@ def logout_all(
 
 
 @router.get("/auth/me")
-def get_me(response: Response, current_user: User = Depends(get_current_user)):
+def get_me(response: Response, current_user: User = Depends(get_session_user)):
     response.headers["Cache-Control"] = "no-store"
     return {"user": user_to_dict(current_user)}
+
+
+@router.post("/auth/password-reset-requests", status_code=status.HTTP_202_ACCEPTED)
+def request_password_reset(
+    http_request: Request,
+    request: PasswordResetRequestCreate,
+    response: Response,
+    db: Session = Depends(get_db),
+):
+    verify_csrf(http_request, expected_binding=PREAUTH_BINDING)
+    enforce_ip_rate_limit(db, http_request, "password_reset_request")
+    note = normalize_request_note(request.request_note)
+    username = normalize_username(request.username)
+    user = None
+    try:
+        validated_username = validate_username(username)
+    except HTTPException:
+        validated_username = ""
+    if validated_username:
+        user = db.query(User).filter(User.username == validated_username).first()
+    verify_password("password-reset-uniform-work", DUMMY_PASSWORD_HASH)
+    create_password_reset_request(db, user=user, request_note=note)
+    response.headers["Cache-Control"] = "no-store"
+    return {"success": True, "message": ANONYMOUS_RESPONSE}
+
+
+@router.post("/auth/change-temporary-password")
+def change_temporary_password(
+    request: TemporaryPasswordChangeRequest,
+    response: Response,
+    current_user: User = Depends(get_session_user),
+    db: Session = Depends(get_db),
+):
+    enforce_user_rate_limit(db, current_user.id, "password_change")
+    if not current_user.must_change_password:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error_code": "temporary_password_not_required",
+                "message": "当前账号不需要修改临时密码",
+            },
+        )
+    try:
+        expires_at = datetime.fromisoformat(
+            current_user.temporary_password_expires_at or ""
+        )
+    except ValueError:
+        expires_at = None
+    if expires_at is None or expires_at <= datetime.now(expires_at.tzinfo):
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error_code": "temporary_password_expired",
+                "message": "临时密码已过期，请重新申请密码重置",
+            },
+        )
+    if request.new_password != request.confirm_password:
+        raise HTTPException(status_code=400, detail="两次输入的新密码不一致")
+    if verify_password(request.new_password, current_user.password_hash):
+        raise HTTPException(status_code=400, detail="新密码不能与临时密码相同")
+    validate_password(request.new_password)
+    current_user.password_hash = hash_password(request.new_password)
+    current_user.must_change_password = False
+    current_user.temporary_password_expires_at = None
+    revoke_all_sessions(db, current_user.id, "temporary_password_changed")
+    record_auth_event(db, "temporary_password_changed", user_id=current_user.id)
+    db.commit()
+    clear_auth_cookies(response)
+    response.headers["Cache-Control"] = "no-store"
+    return {"success": True, "message": "密码修改成功，请使用新密码重新登录"}
 
 
 @router.post("/auth/change-password")

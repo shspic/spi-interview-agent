@@ -26,6 +26,8 @@ export async function installApiMock(page, options = {}) {
   const state = {
     authenticated: options.authenticated ?? true,
     admin: options.admin ?? false,
+    mustChangePassword: Boolean(options.mustChangePassword),
+    resetRequests: options.resetRequests ? [...options.resetRequests] : [],
     files: options.files ? [...options.files] : [],
     jobStatus: options.jobStatus || "succeeded",
     taskPolls: 0,
@@ -45,7 +47,7 @@ export async function installApiMock(page, options = {}) {
   };
   await page.context().addCookies([{ name: "spi_csrf", value: "fixture-csrf", domain: "127.0.0.1", path: "/" }]);
 
-  const user = () => ({ id: state.admin ? 1 : 2, username: state.admin ? "demo_admin" : "demo_user", is_admin: state.admin, is_quota_exempt: Boolean(options.quotaExempt), is_active: true, created_at: now, last_login_at: now });
+  const user = () => ({ id: state.admin ? 1 : 2, username: state.admin ? "demo_admin" : "demo_user", is_admin: state.admin, is_quota_exempt: Boolean(options.quotaExempt), must_change_password: state.mustChangePassword, is_active: true, created_at: now, last_login_at: now });
   const profile = { display_name: "演示用户", target_direction: "Python 后端", self_introduction: "专注可靠的 AI 应用工程。", technical_skills: ["Python", "FastAPI", "PostgreSQL"] };
   const targetJobs = [{ id: 10, job_title: "Python 后端工程师", company_name: "虚构科技", jd_text: "负责 API 与异步任务系统。", notes: "", is_active: true }];
   const interviewQuestion = { id: 70, session_id: 7, question: "请介绍一次你处理后台任务可靠性的经历。", sequence_number: 1, main_question_number: 1, follow_up_number: 0, question_type: "main" };
@@ -77,6 +79,12 @@ export async function installApiMock(page, options = {}) {
         total_score: 78,
         evaluation_summary: "回答已评价。",
         optimized_answer: "基于真实经历作答。",
+        strengths: ["结构清楚"],
+        problems: ["需要补充量化证据"],
+        modification_reason: "补充证据边界并压缩重复表达。",
+        has_evidence_conflict: turn.id === 70,
+        evidence_conflicts: turn.id === 70 ? ["回答中的吞吐量与资料记录不一致。"] : [],
+        unsupported_claims: turn.id === 71 ? ["没有资料支持百分百不重复的表述。"] : [],
       });
       return {
         ...completedInterviewSession,
@@ -128,9 +136,11 @@ export async function installApiMock(page, options = {}) {
     if (path === "/api/auth/me") return state.authenticated ? json(route, { user: user() }) : json(route, { detail: "未登录" }, 401);
     if (path === "/api/auth/register") return json(route, { success: true }, 201);
     if (path === "/api/auth/login") { state.authenticated = true; return json(route, { user: user() }); }
+    if (path === "/api/auth/password-reset-requests") return json(route, { success: true, message: "如果账号存在且申请信息有效，管理员会处理你的申请。" }, 202);
     if (path === "/api/auth/refresh") { state.refreshRequests += 1; state.refreshCsrfHeader = request.headers()["x-csrf-token"] || null; return state.authenticated ? json(route, { success: true }) : json(route, { detail: "会话失效" }, 401); }
     if (path === "/api/auth/logout" || path === "/api/auth/logout-all") { state.authenticated = false; return json(route, { success: true }); }
     if (path === "/api/auth/change-password") return json(route, { success: true, message: "密码已修改，请重新登录。" });
+    if (path === "/api/auth/change-temporary-password") { state.mustChangePassword = false; state.authenticated = false; return json(route, { success: true, message: "密码修改成功，请使用新密码重新登录" }); }
     if (path === "/api/health/ready") return json(route, { status: options.degraded ? "not_ready" : "ready", auth_ready: true, database_ready: !options.degraded, database_type: "postgresql", schema_ready: true, storage_ready: true, task_system_ready: true, worker_ready: !options.degraded }, options.degraded ? 503 : 200);
     if (path === "/api/system/status") return json(route, { database: { file_count: state.files.length, interview_count: state.sessions.length }, knowledge_base: { total_chunks: state.files.length * 4 } });
     if (path === "/api/profile" && method === "GET") { state.profileRequests += 1; if (options.profileUnauthorizedOnce && state.profileRequests === 1) return json(route, { detail: "访问凭证已过期" }, 401); return json(route, { profile }); }
@@ -160,6 +170,13 @@ export async function installApiMock(page, options = {}) {
     if (path === "/api/admin/usage/summary") return json(route, { registered_user_count: 2, active_user_count: 2, agent_run_count: 3, average_latency_ms: 120, business_usage: {}, event_status_counts: {}, daily_trend: [], agent_runs_by_name: {}, recent_failure_types: [] });
     if (path === "/api/admin/background-jobs") return json(route, { items: [], total: 0, page: 1, page_size: 20 });
     if (path === "/api/admin/workers") return json(route, { online_count: 1, offline_count: 0, stopped_count: 0, workers: [{ label: "Worker 1", state: "online", database_type: "postgresql", started_at: now, last_seen_at: now, stopped_at: null }] });
+    if (path === "/api/admin/password-reset-requests" && method === "GET") return json(route, { items: state.resetRequests, total: state.resetRequests.length, page: 1, page_size: 100 });
+    if (/^\/api\/admin\/password-reset-requests\/\d+\/approve$/.test(path)) {
+      const id = Number(path.split("/")[4]);
+      state.resetRequests = state.resetRequests.map((item) => item.id === id ? { ...item, status: "approved", admin_note: request.postDataJSON().admin_note } : item);
+      return json(route, { success: true, request: state.resetRequests.find((item) => item.id === id), temporary_password: "Synthetic-Temp-4821!" });
+    }
+    if (/^\/api\/admin\/password-reset-requests\/\d+\/reject$/.test(path)) return json(route, { success: true });
     return json(route, { detail: `fixture 未实现 ${method} ${path}` }, 404);
   });
 

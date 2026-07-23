@@ -375,6 +375,9 @@ def test_admin_password_reset_uses_hash_and_does_not_leak_password(
     db_session.refresh(user)
     assert not verify_password(old_password, user.password_hash)
     assert verify_password(new_password, user.password_hash)
+    assert user.must_change_password is True
+    assert user.temporary_password_expires_at is not None
+    assert response.headers["cache-control"] == "no-store"
     logs = db_session.query(AdminAuditLog).filter_by(action="reset_password").all()
     assert logs and all(new_password not in log.detail_summary for log in logs)
 

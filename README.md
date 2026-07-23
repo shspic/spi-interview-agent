@@ -1,4 +1,7 @@
-# SPI 面试 Agent
+# AURORA
+
+**AI Interview Intelligence**
+让潜力被看见，让成长有迹可循
 
 一个面向 AI 应用与 Python 后端求职者的证据驱动训练工作台：把个人资料、目标岗位、结构化面试、评价、改进复练和简历表达串成可恢复的完整流程。
 

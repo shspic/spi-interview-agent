@@ -244,6 +244,28 @@ class Settings(BaseModel):
         ge=10,
         le=86_400,
     )
+    password_reset_request_rate_limit_attempts: int = Field(
+        default=int(os.getenv("PASSWORD_RESET_REQUEST_RATE_LIMIT", "5")),
+        ge=1,
+        le=100,
+    )
+    password_reset_request_rate_limit_window_seconds: int = Field(
+        default=int(
+            os.getenv("PASSWORD_RESET_REQUEST_RATE_LIMIT_WINDOW_SECONDS", "3600")
+        ),
+        ge=10,
+        le=86_400,
+    )
+    password_reset_request_note_max_length: int = Field(
+        default=int(os.getenv("PASSWORD_RESET_REQUEST_NOTE_MAX_LENGTH", "500")),
+        ge=0,
+        le=2_000,
+    )
+    temporary_password_ttl_hours: int = Field(
+        default=int(os.getenv("TEMPORARY_PASSWORD_TTL_HOURS", "24")),
+        ge=1,
+        le=168,
+    )
     chat_burst_rate_limit_attempts: int = Field(
         default=int(os.getenv("CHAT_BURST_RATE_LIMIT_ATTEMPTS", "10")),
         ge=1,

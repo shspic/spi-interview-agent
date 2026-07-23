@@ -12,7 +12,7 @@ test("未登录访问受保护路由会跳转登录，注册后恢复原目标�
   await page.getByLabel("密码", { exact: true }).fill("FixturePass123!");
   await page.getByLabel("确认密码").fill("FixturePass123!");
   await page.getByLabel("邀请码").fill("FIXTURE-ONLY");
-  await page.getByRole("button", { name: /注册并进入系统/ }).click();
+  await page.getByRole("button", { name: /注册并进入 AURORA/ }).click();
   await expect(page).toHaveURL(/\/admin$/);
   await expect(page.getByText("无权访问管理后台")).toBeVisible();
 });
@@ -24,9 +24,9 @@ test("直接注册且没有 return-to 时进入默认工作台", async ({ page }
   await page.getByLabel("密码", { exact: true }).fill("FixturePass123!");
   await page.getByLabel("确认密码").fill("FixturePass123!");
   await page.getByLabel("邀请码").fill("FIXTURE-ONLY");
-  await page.getByRole("button", { name: /注册并进入系统/ }).click();
+  await page.getByRole("button", { name: /注册并进入 AURORA/ }).click();
   await expect(page).toHaveURL(/\/interview$/);
-  await expect(page.getByRole("heading", { name: "面试 Agent", level: 1 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "模拟面试", level: 1 })).toBeVisible();
 });
 
 test("登录刷新、直接 URL 与返回键均可用", async ({ page }) => {
@@ -34,7 +34,7 @@ test("登录刷新、直接 URL 与返回键均可用", async ({ page }) => {
   await page.goto("/login");
   await page.getByLabel("用户名").fill("demo_user");
   await page.getByLabel("密码", { exact: true }).fill("FixturePass123!");
-  await page.getByRole("button", { name: "登录", exact: true }).click();
+  await page.getByRole("button", { name: "登录 AURORA", exact: true }).click();
   await expect(page).toHaveURL(/\/interview$/);
   await page.goto("/knowledge");
   await expect(page.getByRole("heading", { name: "知识库管理" })).toBeVisible();
@@ -51,7 +51,7 @@ test("受保护 GET 返回 401 时刷新会话一次并重试原请求", async (
     profileUnauthorizedOnce: true,
   });
   await page.goto("/interview");
-  await expect(page.getByRole("heading", { name: "面试 Agent", level: 1 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "模拟面试", level: 1 })).toBeVisible();
   expect(state.profileRequests).toBe(2);
   expect(state.refreshRequests).toBe(1);
   expect(state.refreshCsrfHeader).toBe("fixture-csrf");

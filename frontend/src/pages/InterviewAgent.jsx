@@ -17,10 +17,10 @@ import {
   getResumeDescriptions,
 } from "../api/resumeDescriptions";
 import ComparisonPanel from "../components/interview/ComparisonPanel";
-import EvaluationPanel from "../components/interview/EvaluationPanel";
 import ImprovementTaskList from "../components/interview/ImprovementTaskList";
 import InterviewSetup from "../components/interview/InterviewSetup";
 import InterviewWorkspace from "../components/interview/InterviewWorkspace";
+import InterviewResult from "../components/interview/InterviewResult";
 import ResumeDescriptionPanel from "../components/interview/ResumeDescriptionPanel";
 import BackgroundJobCard from "../components/BackgroundJobCard";
 import { getFriendlyErrorMessage } from "../utils/errorMessage";
@@ -472,35 +472,7 @@ function InterviewAgent({ onOpenProfile, onOpenKnowledge, requestedSessionId }) 
     if (session.status !== "completed") {
       return <div className="interview-alert warning"><strong>面试尚未完成</strong><p>完成全部计划问题后会生成整场评分和改进任务。</p></div>;
     }
-    const dimensions = session.dimension_scores || {};
-    return (
-      <div className="session-result">
-        <div className="session-score-summary">
-          <div className="overall-score"><span>整场总分</span><strong>{session.overall_score ?? "-"}</strong></div>
-          <div><h2>{session.title}</h2><p>{session.summary || "暂无会话总结。"}</p><span>完成于 {formatDate(session.completed_at)}</span></div>
-        </div>
-        <div className="dimension-summary-grid">
-          {Object.entries({technical_accuracy_score:"技术准确性",evidence_consistency_score:"资料一致性",answer_depth_score:"回答深度",expression_structure_score:"表达结构",job_match_score:"岗位匹配度"}).map(([key,label]) => <div key={key}><span>{label}</span><strong>{dimensions[key] ?? "-"}</strong></div>)}
-        </div>
-        <div className="result-actions">
-          <button type="button" onClick={() => setActiveSection("tasks")}>查看改进任务</button>
-          <button type="button" onClick={handleRetrySession} disabled={pageBusy}>再次练习</button>
-          <button type="button" onClick={() => setActiveSection("resume")}>生成简历描述</button>
-          {session.previous_session && <button type="button" className="secondary-button" onClick={handleLoadComparison}>查看成绩对比</button>}
-        </div>
-        <div className={`improvement-status ${session.improvement_status}`}>
-          <strong>改进任务状态：{session.improvement_status}</strong>
-          {session.improvement_summary && <p>{session.improvement_summary}</p>}
-          {session.next_round_strategy && <p><strong>下一轮策略：</strong>{session.next_round_strategy}</p>}
-          {session.improvement_status === "failed" && <button type="button" onClick={handleImprovementRetry} disabled={pageBusy}>重试生成改进任务</button>}
-        </div>
-        {comparison && <ComparisonPanel comparison={comparison} />}
-        <div className="turn-review-list">
-          <h3>问题与评价回顾</h3>
-          {(session.turns || []).map((turn) => <article key={turn.id} className="turn-review"><div className="question-meta"><span>{turn.follow_up_number ? `追问 ${turn.follow_up_number}` : `主问题 ${turn.main_question_number}`}</span><span>{turn.total_score ?? "待评价"}</span></div><h4>{turn.question}</h4><EvaluationPanel turn={turn} onCopy={handleCopy} compact /></article>)}
-        </div>
-      </div>
-    );
+    return <InterviewResult key={session.id} session={session} sessions={sessions} comparison={comparison} busy={pageBusy} onCopy={handleCopy} onShowTasks={() => setActiveSection("tasks")} onRetry={handleRetrySession} onShowResume={() => setActiveSection("resume")} onLoadComparison={handleLoadComparison} onLoadSession={loadSession} onRetryImprovements={handleImprovementRetry} />;
   };
 
   const renderCurrentSection = () => {
@@ -520,7 +492,7 @@ function InterviewAgent({ onOpenProfile, onOpenKnowledge, requestedSessionId }) 
   return (
     <section className="interview-agent-page">
       <div className="interview-agent-heading">
-        <div><h1>面试 Agent</h1><p>从真实资料出发，完成训练、评价、改进、复练和简历表达。</p></div>
+        <div><h1>模拟面试</h1><p>从真实资料出发，完成训练、评价、改进、复练和简历表达。</p></div>
         <button type="button" className="secondary-button" onClick={loadInitialData} disabled={pageBusy}>刷新数据</button>
       </div>
       {message && <div className="workspace-message" role="status">{message}<button type="button" aria-label="关闭提示" onClick={() => setMessage("")}>×</button></div>}
@@ -536,7 +508,7 @@ function InterviewAgent({ onOpenProfile, onOpenKnowledge, requestedSessionId }) 
 
       <div className="interview-agent-layout">
         <main className="interview-stage">{renderCurrentSection()}</main>
-        <aside className="recent-sessions">
+        {activeSection !== "result" && <aside className="recent-sessions">
           <div className="inline-heading"><h2>最近会话</h2><span>{sessions.length}</span></div>
           {sessions.length === 0 ? <p className="empty-text">暂无面试训练记录。</p> : sessions.slice(0, 10).map((item) => (
             <article key={item.id} className={session?.id === item.id ? "session-list-item active" : "session-list-item"}>
@@ -548,7 +520,7 @@ function InterviewAgent({ onOpenProfile, onOpenKnowledge, requestedSessionId }) 
               <button type="button" className="session-delete-button" aria-label={`删除 ${item.title}`} onClick={() => handleDelete(item.id)} disabled={pageBusy}>删除</button>
             </article>
           ))}
-        </aside>
+        </aside>}
       </div>
     </section>
   );

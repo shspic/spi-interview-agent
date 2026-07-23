@@ -30,6 +30,13 @@ class User(Base):
         default=False,
         server_default=text("false"),
     )
+    must_change_password = Column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=text("false"),
+    )
+    temporary_password_expires_at = Column(Text, nullable=True)
     created_at = Column(Text, nullable=False)
     last_login_at = Column(Text, nullable=True)
     profile = relationship(
@@ -45,6 +52,12 @@ class User(Base):
     )
     auth_sessions = relationship(
         "AuthSession",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+    password_reset_requests = relationship(
+        "PasswordResetRequest",
+        foreign_keys="PasswordResetRequest.user_id",
         back_populates="user",
         cascade="all, delete-orphan",
     )
@@ -918,6 +931,60 @@ class RegistrationSetting(Base):
         ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
     )
+
+
+class PasswordResetRequest(Base):
+    __tablename__ = "password_reset_requests"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending', 'approved', 'rejected', 'cancelled')",
+            name="ck_password_reset_requests_status",
+        ),
+        Index(
+            "ux_password_reset_requests_pending_user",
+            "user_id",
+            unique=True,
+            sqlite_where=text("status = 'pending'"),
+            postgresql_where=text("status = 'pending'"),
+        ),
+        Index(
+            "ix_password_reset_requests_status_requested",
+            "status",
+            "requested_at",
+        ),
+        Index(
+            "ix_password_reset_requests_processed_by",
+            "processed_by_user_id",
+            "processed_at",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    status = Column(Text, nullable=False, default="pending", server_default="pending")
+    request_note = Column(Text, nullable=False, default="", server_default="")
+    admin_note = Column(Text, nullable=False, default="", server_default="")
+    requested_at = Column(Text, nullable=False, index=True)
+    processed_at = Column(Text, nullable=True)
+    processed_by_user_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    created_at = Column(Text, nullable=False)
+    updated_at = Column(Text, nullable=False)
+    user = relationship(
+        "User",
+        foreign_keys=[user_id],
+        back_populates="password_reset_requests",
+    )
+    processed_by = relationship("User", foreign_keys=[processed_by_user_id])
 
 
 class AdminAuditLog(Base):

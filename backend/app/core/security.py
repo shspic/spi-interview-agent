@@ -129,7 +129,7 @@ def decode_access_token(token: str) -> dict:
     }
 
 
-def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
+def get_session_user(request: Request, db: Session = Depends(get_db)) -> User:
     token = request.cookies.get(settings.auth_access_cookie_name)
     authorization = request.headers.get("authorization")
     if authorization:
@@ -188,6 +188,18 @@ def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
         raise
     request.state.auth_session = auth_session
     return user
+
+
+def get_current_user(current_user: User = Depends(get_session_user)) -> User:
+    if current_user.must_change_password:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "error_code": "password_change_required",
+                "message": "请先修改临时密码",
+            },
+        )
+    return current_user
 
 
 def get_current_admin(current_user: User = Depends(get_current_user)) -> User:

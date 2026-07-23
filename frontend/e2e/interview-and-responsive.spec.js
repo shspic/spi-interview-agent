@@ -44,10 +44,10 @@ test("主问题和两次追问按各自 Turn 展示不同内容", async ({ page 
 
   await page.goto("/interview");
   await expect(
-    page.getByText("请介绍一次你处理后台任务可靠性的经历。"),
+    page.getByRole("button", { name: /主问题 1 请介绍一次你处理后台任务可靠性的经历/ }),
   ).toBeVisible();
 
-  const questions = await page.locator("article.turn-review > h4").allTextContents();
+  const questions = await page.locator(".question-accordion-trigger .question-title").allTextContents();
   expect(questions).toEqual([
     "请介绍一次你处理后台任务可靠性的经历。",
     "你如何验证任务不会被重复执行？",
@@ -56,6 +56,27 @@ test("主问题和两次追问按各自 Turn 展示不同内容", async ({ page 
   expect(new Set(questions).size).toBe(3);
   await expect(page.getByText("追问 1", { exact: true })).toBeVisible();
   await expect(page.getByText("追问 2", { exact: true })).toBeVisible();
+});
+
+test("结果页折叠问题并区分资料冲突与无依据内容", async ({ page }) => {
+  await page.addInitScript(() => {
+    window.localStorage.setItem("spi_interview_active_session", "7");
+  });
+  await installApiMock(page, { completedQuestionHistory: true });
+  await page.goto("/interview");
+  await expect(page.getByText("资料冲突 1 项")).toBeVisible();
+  await expect(page.getByText("无依据内容 1 项")).toBeVisible();
+  const triggers = page.locator(".question-accordion-trigger");
+  await expect(triggers).toHaveCount(3);
+  await expect(triggers.first()).toHaveAttribute("aria-expanded", "true");
+  await expect(page.getByText("回答中的吞吐量与资料记录不一致。")).toBeVisible();
+  await triggers.nth(1).click();
+  await expect(triggers.first()).toHaveAttribute("aria-expanded", "false");
+  await expect(triggers.nth(1)).toHaveAttribute("aria-expanded", "true");
+  await expect(page.getByText("没有资料支持百分百不重复的表述。")).toBeVisible();
+  await page.getByRole("tab", { name: "优化回答" }).click();
+  await expect(page.getByText("基于真实经历作答。")).toBeVisible();
+  await expect(page.getByRole("button", { name: "复制优化回答" })).toBeVisible();
 });
 
 for (const terminal of [
@@ -152,7 +173,7 @@ test("桌面与 390px 主页面无整页横向溢出并保留可用导航", asyn
   await installApiMock(page);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/interview");
-  await expect(page.getByRole("heading", { name: "面试 Agent", level: 1 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "模拟面试", level: 1 })).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath("interview-desktop.png"), fullPage: true });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
 

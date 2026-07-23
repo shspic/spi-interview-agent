@@ -13,6 +13,7 @@ from app.schemas.admin import (
     InviteCodeUpdateRequest,
     UserDeleteRequest,
     UserStatusUpdateRequest,
+    PasswordResetDecisionRequest,
 )
 from app.services.admin_audit_service import add_admin_audit_log
 from app.services.admin_reporting_service import (
@@ -42,6 +43,12 @@ from app.services.registration_setting_service import (
     update_registration_invite_code,
 )
 from app.services.rate_limit_service import enforce_user_rate_limit
+from app.services.password_reset_service import (
+    PasswordResetServiceError,
+    approve_password_reset_request,
+    list_password_reset_requests,
+    reject_password_reset_request,
+)
 from app.services.usage_service import get_local_now
 from app.api.deprecation import enforce_sync_long_task_policy
 
@@ -49,6 +56,10 @@ router = APIRouter()
 
 
 def _raise_admin_error(error: AdminServiceError) -> None:
+    raise HTTPException(status_code=error.status_code, detail=error.detail) from error
+
+
+def _raise_password_reset_error(error: PasswordResetServiceError) -> None:
     raise HTTPException(status_code=error.status_code, detail=error.detail) from error
 
 
@@ -128,6 +139,7 @@ def update_user_status(
 def reset_password(
     user_id: int,
     request: AdminPasswordResetRequest,
+    response: Response,
     db: Session = Depends(get_db),
     current_admin: User = Depends(get_current_admin),
 ):
@@ -141,7 +153,75 @@ def reset_password(
         )
     except AdminServiceError as error:
         _raise_admin_error(error)
+    response.headers["Cache-Control"] = "no-store"
     return {"success": True, "message": "临时密码已设置"}
+
+
+@router.get("/admin/password-reset-requests")
+def get_password_reset_requests(
+    request_status: Literal["pending", "approved", "rejected", "cancelled"] | None = Query(
+        default=None,
+        alias="status",
+    ),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin),
+):
+    return list_password_reset_requests(
+        db,
+        request_status=request_status,
+        page=page,
+        page_size=page_size,
+    )
+
+
+@router.post("/admin/password-reset-requests/{request_id}/approve")
+def approve_password_reset(
+    request_id: int,
+    request: PasswordResetDecisionRequest,
+    response: Response,
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin),
+):
+    enforce_user_rate_limit(db, current_admin.id, "admin_write")
+    try:
+        item, temporary_password = approve_password_reset_request(
+            db,
+            request_id=request_id,
+            admin=current_admin,
+            admin_note=request.admin_note,
+        )
+    except PasswordResetServiceError as error:
+        db.rollback()
+        _raise_password_reset_error(error)
+    response.headers["Cache-Control"] = "no-store"
+    return {
+        "success": True,
+        "request": item,
+        "temporary_password": temporary_password,
+    }
+
+
+@router.post("/admin/password-reset-requests/{request_id}/reject")
+def reject_password_reset(
+    request_id: int,
+    request: PasswordResetDecisionRequest,
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin),
+):
+    enforce_user_rate_limit(db, current_admin.id, "admin_write")
+    try:
+        item = reject_password_reset_request(
+            db,
+            request_id=request_id,
+            admin=current_admin,
+            admin_note=request.admin_note,
+        )
+    except PasswordResetServiceError as error:
+        db.rollback()
+        _raise_password_reset_error(error)
+    return {"success": True, "request": item}
 
 
 @router.delete("/admin/users/{user_id}")
