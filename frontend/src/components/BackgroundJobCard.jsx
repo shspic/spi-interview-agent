@@ -43,7 +43,7 @@ export function getTaskLabel(taskType) {
   return taskLabels[taskType] || "后台任务";
 }
 
-function BackgroundJobCard({ job, onCancel, onRetry, compact = false }) {
+function BackgroundJobCard({ job, onCancel, onRetry, retryLabel = "重新创建", compact = false }) {
   if (!job) return null;
   const terminal = terminalJobStatuses.has(job.status);
   const cancellable = !terminal && !["cancel_requested"].includes(job.status);
@@ -67,16 +67,16 @@ function BackgroundJobCard({ job, onCancel, onRetry, compact = false }) {
         <span style={{ width: `${progress}%` }} />
       </div>
       {!compact && <small>创建于 {formatDateTime(job.created_at)}</small>}
-      {(job.status === "failed" || job.status === "timed_out") && (
+      {(job.status === "failed" || job.status === "timed_out" || job.status === "cancelled") && (
         <div className="job-failure" role="alert">
-          <strong>{job.status === "timed_out" ? "任务超过允许时间" : "任务未能完成"}</strong>
-          <p>{job.error_summary || "请稍后重新创建任务；若问题持续出现，请查看系统状态。"}</p>
+          <strong>{job.status === "timed_out" ? "任务超过允许时间" : job.status === "cancelled" ? "任务已取消" : "任务未能完成"}</strong>
+          <p>{job.error_summary || (job.status === "cancelled" ? "任务已停止，可刷新状态或重新发起。" : "请稍后重新创建任务；若问题持续出现，请查看系统状态。")}</p>
         </div>
       )}
       <div className="job-actions">
         {cancellable && onCancel && <button type="button" className="secondary-button" onClick={requestCancel}>取消任务</button>}
         {(job.status === "failed" || job.status === "timed_out" || job.status === "cancelled") && onRetry && (
-          <button type="button" onClick={onRetry}>重新创建</button>
+          <button type="button" onClick={onRetry}>{retryLabel}</button>
         )}
       </div>
     </article>

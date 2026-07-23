@@ -50,6 +50,23 @@ const modeLabels = {
   deep_dive: "专项深挖",
 };
 
+const startPhaseLabels = {
+  queued: "正在启动面试",
+  preparing: "正在准备面试资料",
+  retrieving: "正在准备面试资料",
+  planning: "正在生成首道问题",
+  saving: "正在启动面试",
+};
+
+const evaluationPhaseLabels = {
+  queued: "正在处理本次回答",
+  preparing: "正在保存回答",
+  retrieving: "正在核验回答证据",
+  evaluating: "正在分析回答",
+  planning: "正在生成追问",
+  saving: "正在保存评价",
+};
+
 function formatDate(value) {
   if (!value) {
     return "-";
@@ -213,6 +230,18 @@ function InterviewAgent({ onOpenProfile, onOpenKnowledge, requestedSessionId }) 
     startTask.isRunning || evaluationTask.isRunning || improvementTask.isRunning || resumeTask.isRunning;
   const pageBusy = Boolean(busyAction) || backgroundRunning;
   const pageTasks = [startTask, evaluationTask, improvementTask, resumeTask].filter((item) => item.job);
+  const startLoadingLabel = busyAction === "create"
+    ? "正在创建面试会话"
+    : busyAction === "start"
+      ? "正在启动面试"
+      : startTask.isRunning
+        ? startPhaseLabels[startTask.job?.phase] || "正在创建并启动面试"
+        : "";
+  const answerLoadingLabel = busyAction === "answer"
+    ? "正在保存回答"
+    : evaluationTask.isRunning
+      ? evaluationPhaseLabels[evaluationTask.job?.phase] || "正在处理本次回答"
+      : "";
 
   const runStart = async (sessionId) => {
     setBusyAction("start");
@@ -248,6 +277,7 @@ function InterviewAgent({ onOpenProfile, onOpenKnowledge, requestedSessionId }) 
   };
 
   const handleAnswer = async (turnId, answer) => {
+    setBusyAction("answer");
     setMessage("");
     try {
       await evaluationTask.createJob(
@@ -268,6 +298,8 @@ function InterviewAgent({ onOpenProfile, onOpenKnowledge, requestedSessionId }) 
       } catch {
         setMessage(getFriendlyErrorMessage(error, "提交回答失败。"));
       }
+    } finally {
+      setBusyAction("");
     }
   };
 
@@ -458,7 +490,7 @@ function InterviewAgent({ onOpenProfile, onOpenKnowledge, requestedSessionId }) 
           <div><button type="button" onClick={onOpenProfile}>完善资料</button><button type="button" className="secondary-button" onClick={onOpenKnowledge}>前往知识库</button></div>
         </div>
       )}
-      <InterviewSetup targetJobs={targetJobs} projectFiles={projectFiles} activeJob={activeJob} busy={pageBusy} draftSession={session?.status === "draft" ? session : null} onCreate={handleCreate} onStartDraft={runStart} />
+      <InterviewSetup targetJobs={targetJobs} projectFiles={projectFiles} activeJob={activeJob} busy={pageBusy} loadingLabel={startLoadingLabel} draftSession={session?.status === "draft" ? session : null} onCreate={handleCreate} onStartDraft={runStart} />
     </>
   );
 
@@ -477,7 +509,7 @@ function InterviewAgent({ onOpenProfile, onOpenKnowledge, requestedSessionId }) 
 
   const renderCurrentSection = () => {
     if (activeSection === "setup") return renderPreparation();
-    if (activeSection === "interview") return session?.status === "in_progress" ? <InterviewWorkspace key={`${session.id}-${session.current_question?.id || recoveryTurn?.id || "result"}-${latestResult?.answered_turn?.id || "answer"}`} session={session} latestResult={latestResult} recoveryTurn={recoveryTurn} busy={pageBusy} onSubmit={handleAnswer} onContinue={handleContinue} onCopy={handleCopy} onCancel={handleCancel} /> : <div className="interview-alert warning"><strong>没有进行中的会话</strong><p>从“准备面试”创建新会话，或从最近会话恢复草稿。</p></div>;
+    if (activeSection === "interview") return session?.status === "in_progress" ? <InterviewWorkspace key={`${session.id}-${session.current_question?.id || recoveryTurn?.id || "result"}-${latestResult?.answered_turn?.id || "answer"}`} session={session} latestResult={latestResult} recoveryTurn={recoveryTurn} busy={pageBusy} loadingLabel={answerLoadingLabel} onSubmit={handleAnswer} onContinue={handleContinue} onCopy={handleCopy} onCancel={handleCancel} /> : <div className="interview-alert warning"><strong>没有进行中的会话</strong><p>从“准备面试”创建新会话，或从最近会话恢复草稿。</p></div>;
     if (activeSection === "result") return renderResult();
     if (activeSection === "tasks") return session?.status === "completed" ? <><div className="strategy-panel"><h3>改进诊断</h3><p>{session.improvement_summary || "暂无诊断。"}</p><h4>下一轮训练策略</h4><p>{session.next_round_strategy || "暂无策略。"}</p>{session.improvement_status === "failed" && <button type="button" onClick={handleImprovementRetry}>重试生成</button>}</div><ImprovementTaskList tasks={session.improvement_tasks || []} updatingTaskId={updatingTaskId} onToggle={handleTaskToggle} /></> : <p className="empty-text">完成一场面试后查看改进任务。</p>;
     if (activeSection === "retry") return retryInfo ? <div className="retry-confirmation"><span className="status-badge draft">再次练习草稿</span><h2>{retryInfo.title}</h2><p>上一轮任务共 {retryInfo.previous_task_count} 项，已完成 {retryInfo.completed_task_count} 项，完成率 {retryInfo.task_completion_rate}%。</p><p><strong>训练策略：</strong>{session.previous_session?.next_round_strategy || "启动后将使用上一轮策略和未完成任务作为计划参考，不作为事实证据。"}</p><button type="button" onClick={() => runStart(retryInfo.id)} disabled={pageBusy}>确认并开始新一轮</button></div> : session?.previous_session ? <ComparisonPanel comparison={comparison} loading={busyAction === "comparison"} onLoad={handleLoadComparison} /> : <p className="empty-text">完成面试后可创建再次练习。</p>;
@@ -498,7 +530,15 @@ function InterviewAgent({ onOpenProfile, onOpenKnowledge, requestedSessionId }) 
       {message && <div className="workspace-message" role="status">{message}<button type="button" aria-label="关闭提示" onClick={() => setMessage("")}>×</button></div>}
       {pageTasks.length > 0 && (
         <div className="page-job-list">
-          {pageTasks.map((item) => <BackgroundJobCard key={item.job.task_id} job={item.job} onCancel={item.cancelJob} />)}
+          {pageTasks.map((item) => (
+            <BackgroundJobCard
+              key={`${item.job.task_id}-${item.job.task_type}`}
+              job={item.job}
+              onCancel={item.cancelJob}
+              onRetry={item === startTask && session ? () => runStart(session.id) : item === evaluationTask ? handleContinue : undefined}
+              retryLabel={item === evaluationTask ? "刷新恢复状态" : "重新启动"}
+            />
+          ))}
         </div>
       )}
 
@@ -517,7 +557,7 @@ function InterviewAgent({ onOpenProfile, onOpenKnowledge, requestedSessionId }) 
                 <p>{modeLabels[item.mode]} · {formatDate(item.created_at)}</p>
                 {item.overall_score != null && <span>总分 {item.overall_score}</span>}
               </button>
-              <button type="button" className="session-delete-button" aria-label={`删除 ${item.title}`} onClick={() => handleDelete(item.id)} disabled={pageBusy}>删除</button>
+              <button type="button" className="session-delete-button danger-button" aria-label={`删除 ${item.title}`} onClick={() => handleDelete(item.id)} disabled={pageBusy}>删除</button>
             </article>
           ))}
         </aside>}
