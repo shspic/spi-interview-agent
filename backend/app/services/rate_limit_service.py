@@ -39,6 +39,10 @@ def get_rate_limit_rule(scope: str) -> RateLimitRule:
             settings.password_change_rate_limit_attempts,
             settings.password_change_rate_limit_window_seconds,
         ),
+        "password_reset_request": RateLimitRule(
+            settings.password_reset_request_rate_limit_attempts,
+            settings.password_reset_request_rate_limit_window_seconds,
+        ),
         "chat_burst": RateLimitRule(
             settings.chat_burst_rate_limit_attempts,
             settings.chat_burst_rate_limit_window_seconds,

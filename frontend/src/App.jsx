@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import apiClient from "./api/client";
 import { useAuth } from "./auth/authContext";
 import BackgroundJobCenter from "./components/BackgroundJobCenter";
+import BrandLockup from "./components/BrandLockup";
 import StatePanel from "./components/StatePanel";
 import { useLocationPath } from "./routing";
 import AdminDashboard from "./pages/AdminDashboard";
@@ -14,11 +15,14 @@ import Profile from "./pages/Profile";
 import Settings from "./pages/Settings";
 import SystemStatus from "./pages/SystemStatus";
 import Usage from "./pages/Usage";
+import PasswordResetRequest from "./pages/PasswordResetRequest";
+import TemporaryPasswordChange from "./pages/TemporaryPasswordChange";
 
 import "./index.css";
+import "./aurora.css";
 
 const primaryPages = [
-  ["/interview", "面试 Agent", "从资料准备到面试、评价、改进复练和简历表达的一体化训练工作台。"],
+  ["/interview", "模拟面试", "从资料准备到面试、评价、改进复练和简历表达的一体化训练工作台。"],
   ["/knowledge", "知识库", "管理 PDF、TXT、MD 资料以及索引状态。"],
   ["/history", "历史", "查看训练记录、评价结果与历史版本。"],
   ["/system", "系统状态", "查看服务、数据库、Worker 与资料存储的可用状态。"],
@@ -31,7 +35,7 @@ const utilityPages = {
   "/admin": ["管理后台", "查看用户、任务、审计与运行状态。"],
 };
 
-const publicPaths = new Set(["/login", "/register"]);
+const publicPaths = new Set(["/login", "/register", "/password-reset"]);
 
 function NotFound({ navigate }) {
   return <StatePanel tone="error" title="页面不存在" description="该地址无对应页面，可能已移动或输入有误。" actionLabel="返回面试工作台" onAction={() => navigate("/interview", { replace: true })} />;
@@ -57,12 +61,27 @@ function App() {
       }
       return;
     }
+    if (currentUser?.must_change_password) {
+      if (pathname !== "/change-temporary-password") {
+        if (!publicPaths.has(pathname) && pathname !== "/") {
+          window.sessionStorage.setItem("aurora.return-to", location);
+        }
+        navigate("/change-temporary-password", { replace: true });
+      }
+      return;
+    }
+    if (pathname === "/change-temporary-password") {
+      navigate("/interview", { replace: true });
+      return;
+    }
     if (pathname === "/" || publicPaths.has(pathname)) {
-      const returnTo = window.sessionStorage.getItem("spi.return-to");
+      const returnTo = window.sessionStorage.getItem("aurora.return-to")
+        || window.sessionStorage.getItem("spi.return-to");
+      window.sessionStorage.removeItem("aurora.return-to");
       window.sessionStorage.removeItem("spi.return-to");
       navigate(returnTo?.startsWith("/") ? returnTo : "/interview", { replace: true });
     }
-  }, [isAuthenticated, isLoading, location, navigate, pathname]);
+  }, [currentUser?.must_change_password, isAuthenticated, isLoading, location, navigate, pathname]);
 
   useEffect(() => {
     if (!isAuthenticated) return undefined;
@@ -90,8 +109,12 @@ function App() {
   const pageMeta = useMemo(() => {
     const primary = primaryPages.find(([path]) => path === pathname);
     if (primary) return [primary[1], primary[2]];
-    return utilityPages[pathname] || ["页面", "SPI 面试训练工作台"];
+    return utilityPages[pathname] || ["页面", "AURORA 面试训练工作台"];
   }, [pathname]);
+
+  useEffect(() => {
+    document.title = `${pageMeta[0]} · AURORA`;
+  }, [pageMeta]);
 
   const go = (path) => {
     setUserMenuOpen(false);
@@ -104,7 +127,14 @@ function App() {
   }
 
   if (!isAuthenticated) {
-    return <AuthPage initialMode={pathname === "/register" ? "register" : "login"} onModeChange={(mode) => navigate(mode === "register" ? "/register" : "/login", { replace: true })} />;
+    if (pathname === "/password-reset") {
+      return <PasswordResetRequest onBack={() => navigate("/login")} />;
+    }
+    return <AuthPage initialMode={pathname === "/register" ? "register" : "login"} onModeChange={(mode) => navigate(mode === "register" ? "/register" : "/login", { replace: true })} onPasswordReset={() => navigate("/password-reset")} />;
+  }
+
+  if (currentUser?.must_change_password) {
+    return <TemporaryPasswordChange onCompleted={() => navigate("/login", { replace: true })} />;
   }
 
   const requestedSessionId = Number(new URLSearchParams(location.split("?")[1] || "").get("session")) || null;
@@ -125,7 +155,7 @@ function App() {
         <span>导航</span>
       </button>
       <aside className={`sidebar${mobileNavOpen ? " is-open" : ""}`} id="primary-navigation">
-        <div className="sidebar-brand"><span className="brand-mark">AI</span><div><p className="sidebar-kicker">NO.1 Agent Console</p><h1 className="sidebar-title">SPI面试Agent</h1></div></div>
+        <div className="sidebar-brand"><BrandLockup compact /></div>
         <nav className="sidebar-nav" aria-label="主导航">
           {primaryPages.map(([path, label], index) => (
             <button key={path} type="button" className={pathname === path ? "nav-button active" : "nav-button"} onClick={() => go(path)} aria-current={pathname === path ? "page" : undefined}>
@@ -153,7 +183,7 @@ function App() {
 
       <main className="main-content">
         <header className="top-panel">
-          <div><p className="eyebrow">AI Interview Workspace</p><h2>{pageMeta[0]}</h2><p>{pageMeta[1]}</p></div>
+          <div><p className="eyebrow">AURORA · MISSION BRIDGE</p><h2>{pageMeta[0]}</h2><p>{pageMeta[1]}</p></div>
           <div className="top-panel-actions">
             {pathname !== "/profile" && pathname !== "/admin" && <button type="button" className="profile-entry-button" onClick={() => go("/profile")}>完善资料</button>}
             <BackgroundJobCenter />

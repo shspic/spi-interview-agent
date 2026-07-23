@@ -85,6 +85,15 @@ function AuthProvider({ children }) {
     }
   }, [clearAuth]);
 
+  const changeTemporaryPassword = useCallback(async ({ newPassword, confirmPassword }) => {
+    const response = await apiClient.post("/api/auth/change-temporary-password", {
+      new_password: newPassword,
+      confirm_password: confirmPassword,
+    });
+    clearAuth();
+    return response.data;
+  }, [clearAuth]);
+
   const value = useMemo(
     () => ({
       currentUser,
@@ -95,8 +104,9 @@ function AuthProvider({ children }) {
       logout,
       logoutAll,
       refreshCurrentUser,
+      changeTemporaryPassword,
     }),
-    [currentUser, isLoading, login, logout, logoutAll, refreshCurrentUser, register],
+    [changeTemporaryPassword, currentUser, isLoading, login, logout, logoutAll, refreshCurrentUser, register],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

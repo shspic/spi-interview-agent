@@ -14,26 +14,52 @@ from app.db.models import User
 from app.services.admin_audit_service import add_admin_audit_log
 
 
-def parse_args():
+def parse_args(argv=None):
     parser = argparse.ArgumentParser(
-        description="提升或取消现有用户的管理员权限。默认仅预览。",
+        description="设置现有用户的管理员权限和 AI 每日额度豁免。默认仅预览。",
     )
     parser.add_argument("--username", required=True, help="现有用户名")
-    parser.add_argument(
+    admin_group = parser.add_mutually_exclusive_group()
+    admin_group.add_argument(
+        "--grant-admin",
+        dest="admin_target",
+        action="store_const",
+        const=True,
+        help="授予管理员权限",
+    )
+    admin_group.add_argument(
+        "--revoke-admin",
         "--revoke",
-        action="store_true",
-        help="取消管理员权限；默认操作为提升管理员",
+        dest="admin_target",
+        action="store_const",
+        const=False,
+        help="撤销管理员权限（--revoke 为兼容别名）",
+    )
+    quota_group = parser.add_mutually_exclusive_group()
+    quota_group.add_argument(
+        "--grant-quota-exempt",
+        dest="quota_target",
+        action="store_const",
+        const=True,
+        help="授予 AI 每日额度豁免",
+    )
+    quota_group.add_argument(
+        "--revoke-quota-exempt",
+        dest="quota_target",
+        action="store_const",
+        const=False,
+        help="撤销 AI 每日额度豁免",
     )
     parser.add_argument(
         "--apply",
         action="store_true",
         help="确认执行；未提供时只显示预览",
     )
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
-def main():
-    args = parse_args()
+def main(argv=None):
+    args = parse_args(argv)
     require_current_schema(engine)
     db = SessionLocal()
     try:
@@ -42,13 +68,26 @@ def main():
         if user is None:
             raise SystemExit("指定用户不存在，请先注册该用户。")
 
-        action_name = "取消管理员权限" if args.revoke else "提升为管理员"
-        print(f"预览：用户 {user.username} 将被{action_name}。")
+        admin_target = args.admin_target
+        quota_target = args.quota_target
+        if admin_target is None and quota_target is None:
+            admin_target = True
+        if admin_target is None:
+            admin_target = bool(user.is_admin)
+        if quota_target is None:
+            quota_target = bool(user.is_quota_exempt)
+
+        print(f"user id: {user.id}")
+        print(f"username: {user.username}")
+        print(f"当前 is_admin: {bool(user.is_admin)}")
+        print(f"目标 is_admin: {admin_target}")
+        print(f"当前 is_quota_exempt: {bool(user.is_quota_exempt)}")
+        print(f"目标 is_quota_exempt: {quota_target}")
         if not args.apply:
             print("未提供 --apply，数据库未修改。")
             return
 
-        if args.revoke and user.is_admin:
+        if not admin_target and user.is_admin:
             other_active_admins = (
                 db.query(func.count(User.id))
                 .filter(
@@ -62,18 +101,34 @@ def main():
             if other_active_admins == 0:
                 raise SystemExit("操作已拒绝：系统中没有其他可用管理员。")
 
-        user.is_admin = not args.revoke
-        add_admin_audit_log(
-            db,
-            admin_user_id=None,
-            action="revoke_admin" if args.revoke else "set_admin",
-            target_user_id=user.id,
-            resource_type="user",
-            resource_id=user.id,
-            status="success",
-            detail_summary="管理员初始化脚本已执行",
-            commit=False,
-        )
+        changes = []
+        if bool(user.is_admin) != admin_target:
+            user.is_admin = admin_target
+            changes.append((
+                "set_admin" if admin_target else "revoke_admin",
+                "管理员权限已由管理脚本更新",
+            ))
+        if bool(user.is_quota_exempt) != quota_target:
+            user.is_quota_exempt = quota_target
+            changes.append((
+                "grant_quota_exempt" if quota_target else "revoke_quota_exempt",
+                "AI 每日额度豁免已由管理脚本更新",
+            ))
+        if not changes:
+            print("目标状态已存在，数据库无需修改。")
+            return
+        for action, detail_summary in changes:
+            add_admin_audit_log(
+                db,
+                admin_user_id=None,
+                action=action,
+                target_user_id=user.id,
+                resource_type="user",
+                resource_id=user.id,
+                status="success",
+                detail_summary=detail_summary,
+                commit=False,
+            )
         db.commit()
         print("操作完成。")
     finally:

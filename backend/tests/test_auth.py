@@ -23,6 +23,11 @@ def test_correct_invite_code_can_register(client, db_session):
 
     assert response.status_code == 201
     assert response.json()["user"]["username"] == "alice"
+    assert response.json()["user"]["is_admin"] is False
+    assert response.json()["user"]["is_quota_exempt"] is False
+    user = db_session.query(User).filter_by(username="alice").one()
+    assert user.is_admin is False
+    assert user.is_quota_exempt is False
     registration_setting = db_session.get(RegistrationSetting, 1)
     assert registration_setting.invite_code_hash != "test-invite-code"
     assert verify_password(

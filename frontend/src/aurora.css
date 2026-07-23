@@ -1,0 +1,184 @@
+/*
+ * AURORA 最终级联层。
+ * index.css 仍保留原有页面规则；本文件只把历史发布候选样式收敛到深空主题，
+ * 并且必须在 index.css 之后加载。
+ */
+:root {
+  --rc-bg: var(--color-abyss);
+  --rc-surface: var(--color-deck);
+  --rc-surface-muted: var(--color-panel);
+  --rc-text: var(--aurora-text);
+  --rc-muted: var(--aurora-text-secondary);
+  --rc-border: var(--aurora-line);
+  --rc-accent: var(--color-cyan-glow);
+  --rc-accent-strong: var(--color-teal-deep);
+  --rc-success: var(--color-neon-green);
+  --rc-warning: var(--color-amber-warm);
+  --rc-danger: var(--aurora-danger);
+  --rc-shadow: var(--aurora-shadow-soft);
+  --text-main: var(--aurora-text);
+  --text-muted: var(--aurora-text-secondary);
+  --line-soft: var(--aurora-line);
+  --line-strong: var(--aurora-line-strong);
+  --shadow-soft: var(--aurora-shadow-soft);
+  --shadow-lift: var(--aurora-shadow-float);
+  --brand-indigo: var(--color-cyan-glow);
+  --brand-cyan: var(--color-amber-warm);
+}
+
+body {
+  color: var(--aurora-text);
+  background:
+    radial-gradient(circle at 82% 0%, rgba(77, 216, 230, 0.08), transparent 34rem),
+    var(--color-abyss);
+}
+
+.content-card,
+.top-panel,
+.settings-section,
+.admin-panel,
+.usage-card,
+.state-panel,
+.background-job-card,
+.search-result-list article,
+.worker-card,
+.job-center-panel {
+  color: var(--aurora-text);
+  background: rgba(12, 26, 36, 0.97);
+  border-color: var(--aurora-line);
+  box-shadow: var(--aurora-shadow-soft);
+}
+
+.sidebar {
+  color: var(--aurora-text);
+  background:
+    linear-gradient(180deg, rgba(77, 216, 230, 0.04), transparent 25%),
+    var(--color-hull);
+  border-right-color: var(--aurora-line);
+}
+
+.mobile-nav-trigger {
+  color: var(--aurora-text);
+  background: var(--color-hull);
+  border-color: var(--aurora-line-strong);
+}
+
+.job-progress {
+  background: rgba(175, 197, 204, 0.12);
+}
+
+.job-progress span {
+  background: var(--color-cyan-glow);
+}
+
+.job-failure {
+  color: #ffdfe3;
+  background: rgba(255, 107, 120, 0.1);
+}
+
+.drop-zone,
+.upload-limits > * {
+  color: var(--aurora-text);
+  background: var(--color-panel);
+  border-color: var(--aurora-line);
+}
+
+.drop-zone.is-dragging {
+  background: rgba(77, 216, 230, 0.08);
+  border-color: var(--color-cyan-glow);
+}
+
+.status-badge.online,
+.status-badge.success {
+  color: var(--color-neon-green);
+  background: rgba(124, 255, 158, 0.09);
+}
+
+.status-badge.offline,
+.status-badge.timed_out,
+.status-badge.warning {
+  color: var(--color-amber-warm);
+  background: rgba(255, 183, 101, 0.1);
+}
+
+.status-badge.stopped,
+.status-badge.failed {
+  color: var(--aurora-danger);
+  background: rgba(255, 107, 120, 0.1);
+}
+
+.auth-page {
+  min-height: 100dvh;
+  color: var(--aurora-text);
+  background: var(--color-void);
+}
+
+.auth-card {
+  width: min(520px, 100%);
+  padding: clamp(24px, 4vw, 42px);
+  color: var(--aurora-text);
+  background: rgba(17, 38, 50, 0.92);
+  border: 1px solid var(--aurora-line-strong);
+  border-radius: var(--aurora-radius-lg);
+  box-shadow: var(--aurora-shadow-float);
+  backdrop-filter: blur(20px);
+}
+
+.auth-brand {
+  display: grid;
+  gap: 18px;
+  padding-bottom: 0;
+  margin-bottom: 24px;
+  border-bottom: 0;
+}
+
+.auth-brand h1,
+.auth-form label {
+  color: var(--aurora-text);
+}
+
+.auth-form input,
+.auth-form textarea {
+  min-height: 46px;
+  color: var(--aurora-text);
+  background: #091720;
+  border-color: var(--aurora-line);
+}
+
+.auth-help,
+.auth-intro {
+  color: var(--aurora-text-secondary);
+}
+
+.password-toggle {
+  color: var(--color-cyan-glow);
+}
+
+.auth-error {
+  color: #ffdfe3;
+  background: rgba(255, 107, 120, 0.1);
+  border-color: rgba(255, 107, 120, 0.35);
+}
+
+.auth-submit {
+  color: #071013;
+  background: var(--color-amber-warm);
+  border-color: var(--color-amber-warm);
+}
+
+.auth-switch {
+  color: var(--color-cyan-glow);
+}
+
+.auth-loading {
+  color: var(--aurora-text-secondary);
+  background: var(--color-panel);
+  border-color: var(--aurora-line);
+}
+
+@media (max-width: 768px) {
+  .mobile-nav-trigger {
+    min-width: 64px;
+    min-height: 44px;
+  }
+}

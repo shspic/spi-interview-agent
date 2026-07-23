@@ -1,8 +1,11 @@
 
+from datetime import timedelta
+
 from fastapi import HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.security import hash_password, validate_password
 from app.db.models import (
     AgentRun,
@@ -21,7 +24,12 @@ from app.db.models import (
     UserProfile,
 )
 from app.services.admin_audit_service import add_admin_audit_log
-from app.services.auth_session_service import record_auth_event, revoke_all_sessions
+from app.services.auth_session_service import (
+    record_auth_event,
+    revoke_all_sessions,
+    utc_now,
+    utc_text,
+)
 from app.services.usage_service import get_user_usage
 from app.services.vector_store import delete_user_vectors
 from app.services.upload_security import (
@@ -55,6 +63,7 @@ def get_admin_user_summary(db: Session, user: User) -> dict:
         "username": user.username,
         "is_active": bool(user.is_active),
         "is_admin": bool(user.is_admin),
+        "is_quota_exempt": bool(user.is_quota_exempt),
         "created_at": user.created_at,
         "last_login_at": user.last_login_at,
         "today_usage": get_user_usage(db, user.id)["items"],
@@ -163,6 +172,10 @@ def reset_user_password(
         user = get_admin_user(db, user_id)
         validate_password(new_password)
         user.password_hash = hash_password(new_password)
+        user.must_change_password = True
+        user.temporary_password_expires_at = utc_text(
+            utc_now() + timedelta(hours=settings.temporary_password_ttl_hours)
+        )
         revoke_all_sessions(db, user.id, "admin_password_reset")
         record_auth_event(db, "admin_password_reset", user_id=user.id)
         add_admin_audit_log(

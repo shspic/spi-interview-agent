@@ -1,11 +1,13 @@
 from collections.abc import Callable
 
+from app.agents.interview_context import build_improvement_context
 from app.agents.prompts.improvement_prompt import (
     IMPROVEMENT_PROMPT_VERSION,
     build_improvement_messages,
 )
 from app.agents.schemas import ImprovementInput, ImprovementOutput
 from app.agents.structured_llm import invoke_structured
+from app.core.config import settings
 
 
 class ImprovementAgent:
@@ -16,6 +18,10 @@ class ImprovementAgent:
         self.llm_call = llm_call
 
     def generate(self, payload: ImprovementInput) -> ImprovementOutput:
+        context = build_improvement_context(
+            payload,
+            budget_chars=settings.interview_context_char_budget,
+        )
         allowed_turn_ids = {turn.turn_id for turn in payload.turns}
         existing_keys = {
             self._task_key(task.title, task.category, task.source_turn_id)
@@ -40,7 +46,7 @@ class ImprovementAgent:
                 generated_keys.add(key)
 
         return invoke_structured(
-            build_improvement_messages(payload),
+            build_improvement_messages(payload, context=context),
             ImprovementOutput,
             self.llm_call,
             semantic_validator=validate,

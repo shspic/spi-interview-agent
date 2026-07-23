@@ -32,6 +32,24 @@ INVALID_EVIDENCE_REASONS = {
     "file_owner_mismatch",
     "unsupported_source_type",
 }
+_SENTENCE_BOUNDARIES = "\n。！？.!?；;"
+
+
+def _truncate_complete_sentences(value: str, limit: int) -> str:
+    if len(value) <= limit:
+        return value
+    prefix = value[:limit]
+    boundary = max(prefix.rfind(marker) for marker in _SENTENCE_BOUNDARIES)
+    if boundary >= limit // 2:
+        return prefix[: boundary + 1].rstrip()
+    following = [
+        index
+        for marker in _SENTENCE_BOUNDARIES
+        if (index := value.find(marker, limit)) >= 0
+    ]
+    if following:
+        return value[: min(following) + 1].rstrip()
+    return value
 
 
 def _filter_owned_file_chunks(
@@ -124,7 +142,7 @@ def load_profile_evidence(
     content_parts = [
         f"目标方向：{profile.target_direction}" if profile.target_direction else "",
         f"技术栈：{', '.join(str(item) for item in skills)}" if skills else "",
-        f"自我介绍：{profile.self_introduction[:2000]}"
+        f"自我介绍：{_truncate_complete_sentences(profile.self_introduction, 2000)}"
         if profile.self_introduction
         else "",
     ]
@@ -159,7 +177,7 @@ def _load_job_requirements(
             source_id=f"target_job:{job.id}",
             content=(
                 f"岗位：{job.job_title}\n公司：{job.company_name}\n"
-                f"JD：{job.jd_text[:5000]}"
+                f"JD：{_truncate_complete_sentences(job.jd_text, 5000)}"
             ),
         )
     ]
@@ -289,7 +307,10 @@ def retrieve_interview_evidence(
             ),
             filename=record.filename,
             chunk_index=chunk_index,
-            content=str(chunk.get("content") or "")[:2000],
+            content=_truncate_complete_sentences(
+                str(chunk.get("content") or ""),
+                2000,
+            ),
             distance=distance,
         )
         if category == "project":

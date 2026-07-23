@@ -10,11 +10,17 @@ from app.core.http_security import get_current_request_id
 from app.agents.evidence_agent import EvidenceAgent
 from app.agents.evaluation_agent import EvaluationAgent
 from app.agents.interviewer_agent import InterviewerAgent
+from app.agents.question_progression import (
+    QuestionIntent,
+    infer_covered_intents,
+    select_target_intent,
+)
 from app.agents.schemas import (
     EvidenceOutput,
     EvidenceQueryInput,
     EvaluationInput,
     EvaluationOutput,
+    InterviewHistoryItem,
     InterviewerInput,
     InterviewerOutput,
     InterviewPlanInput,
@@ -25,9 +31,9 @@ from app.agents.schemas import (
     TrainingGuidance,
 )
 from app.agents.supervisor_agent import SupervisorAgent
-from app.db.models import AgentRun
-from app.services.interview_session_service import now_iso
+from app.db.models import AgentRun, InterviewTurn
 from app.services.evaluation_service import persist_turn_evaluation
+from app.services.interview_session_service import now_iso
 
 
 class InterviewGraphState(TypedDict, total=False):
@@ -49,6 +55,10 @@ class InterviewGraphState(TypedDict, total=False):
     evaluation: EvaluationOutput
     decision: SupervisorDecisionOutput
     generated_question: InterviewerOutput
+    question_history: list[InterviewHistoryItem]
+    asked_questions: list[str]
+    covered_intents: list[QuestionIntent]
+    target_intent: QuestionIntent
 
 
 class InterviewAgentRuntime:
@@ -247,12 +257,55 @@ def build_interview_graph(runtime: InterviewAgentRuntime):
             previous_question = state["current_question"]
             previous_answer = state["latest_answer"]
             follow_up_reason = decision.reason
+        history_turns = (
+            runtime.db.query(InterviewTurn)
+            .filter(
+                InterviewTurn.session_id == runtime.session_id,
+                InterviewTurn.user_id == runtime.user_id,
+            )
+            .order_by(InterviewTurn.sequence_number.asc())
+            .all()
+        )
+        question_history = [
+            InterviewHistoryItem(
+                main_question_number=turn.main_question_number,
+                follow_up_number=turn.follow_up_number,
+                question=turn.question,
+                answer=turn.user_answer,
+                evaluation_summary=turn.evaluation_summary,
+                evidence_conflicts=turn.evidence_conflicts or [],
+            )
+            for turn in history_turns
+        ]
+        asked_questions = [turn.question for turn in history_turns]
+        covered_intents = infer_covered_intents(asked_questions)
+        target_intent = select_target_intent(
+            action,
+            asked_questions,
+            follow_up_reason,
+        )
+        previous_evaluation = None
+        if state.get("evaluation") is not None:
+            evaluation = state["evaluation"]
+            previous_evaluation = SupervisorEvaluationSummary(
+                technical_accuracy_score=evaluation.technical_accuracy_score,
+                evidence_consistency_score=evaluation.evidence_consistency_score,
+                answer_depth_score=evaluation.answer_depth_score,
+                has_evidence_conflict=evaluation.has_evidence_conflict,
+                evaluation_summary=evaluation.evaluation_summary,
+            )
         payload = InterviewerInput(
             action=action,
             mode=state["mode"],
             main_question_number=main_question_number,
             plan=state["plan"],
             evidence=state["evidence"],
+            history=question_history,
+            asked_questions=asked_questions,
+            current_answer=previous_answer,
+            previous_evaluation=previous_evaluation,
+            covered_intents=covered_intents,
+            target_intent=target_intent,
             previous_question=previous_question,
             previous_answer=previous_answer,
             follow_up_reason=follow_up_reason,
@@ -261,7 +314,13 @@ def build_interview_graph(runtime: InterviewAgentRuntime):
             runtime.interviewer,
             lambda: runtime.interviewer.generate_question(payload),
         )
-        return {"generated_question": question}
+        return {
+            "generated_question": question,
+            "question_history": question_history,
+            "asked_questions": asked_questions,
+            "covered_intents": covered_intents,
+            "target_intent": target_intent,
+        }
 
     builder = StateGraph(InterviewGraphState)
     builder.add_node("supervisor_plan", supervisor_plan_node)

@@ -13,6 +13,12 @@ class AdminPasswordResetRequest(BaseModel):
     new_password: str = Field(max_length=72)
 
 
+class PasswordResetDecisionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    admin_note: str = Field(default="", max_length=500)
+
+
 class UserDeleteRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

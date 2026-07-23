@@ -9,7 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.db.models import DailyUsageCounter, UsageEvent
+from app.db.models import DailyUsageCounter, UsageEvent, User
 
 LIMITED_USAGE_TYPES = (
     "chat",
@@ -75,6 +75,14 @@ def get_usage_limit(usage_type: str) -> int | None:
         "multi_agent_task": settings.daily_multi_agent_task_limit,
     }
     return limits.get(usage_type)
+
+
+def is_quota_exempt(db: Session, user_id: int) -> bool:
+    return bool(
+        db.query(User.is_quota_exempt)
+        .filter(User.id == user_id)
+        .scalar()
+    )
 
 
 def get_reset_at(local_now: datetime) -> str:
@@ -255,7 +263,7 @@ def reserve_usage(
         raise UsageReservationConflict(409, "相同业务请求正在处理中")
 
     _ensure_counter(db, user_id, usage_type, usage_date, now_text)
-    limit = get_usage_limit(usage_type)
+    limit = None if is_quota_exempt(db, user_id) else get_usage_limit(usage_type)
     conditions = [
         DailyUsageCounter.user_id == user_id,
         DailyUsageCounter.usage_type == usage_type,
@@ -441,18 +449,22 @@ def get_user_usage(
 ) -> dict:
     local_now = get_local_now(now)
     usage_date = local_now.date().isoformat()
+    unlimited = is_quota_exempt(db, user_id)
     items = []
     for usage_type in LIMITED_USAGE_TYPES:
         used, reserved = _counter_values(db, user_id, usage_type, usage_date)
-        limit = get_usage_limit(usage_type)
+        limit = None if unlimited else get_usage_limit(usage_type)
         items.append(
             {
                 "usage_type": usage_type,
                 "display_name": USAGE_DISPLAY_NAMES[usage_type],
+                "unlimited": unlimited,
                 "limit": limit,
                 "used": used,
                 "reserved": reserved,
-                "remaining": max(0, limit - used - reserved),
+                "remaining": (
+                    None if unlimited else max(0, limit - used - reserved)
+                ),
                 "reset_at": get_reset_at(local_now),
             }
         )

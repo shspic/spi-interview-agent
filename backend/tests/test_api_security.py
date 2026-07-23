@@ -126,11 +126,15 @@ def test_login_register_and_password_change_rate_limits(client, monkeypatch):
 
 def test_upload_change_password_and_chat_rate_limits(
     client,
+    db_session,
     monkeypatch,
     tmp_path,
 ):
     monkeypatch.setattr(settings, "upload_dir", str(tmp_path / "uploads"))
     headers = register_and_login(client)
+    user = db_session.query(User).filter_by(username="alice").one()
+    user.is_quota_exempt = True
+    db_session.commit()
 
     monkeypatch.setattr(settings, "upload_rate_limit_attempts", 1)
     assert upload_text(client, headers).status_code == 200
@@ -413,6 +417,9 @@ def test_file_size_count_quota_and_failed_cleanup(
     monkeypatch.setattr(settings, "upload_dir", str(upload_root))
     monkeypatch.setattr(settings, "max_upload_file_size_mb", 1)
     headers = register_and_login(client)
+    user = db_session.query(User).filter_by(username="alice").one()
+    user.is_quota_exempt = True
+    db_session.commit()
 
     oversized = upload_text(
         client,

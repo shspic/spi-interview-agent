@@ -19,9 +19,15 @@ PASSWORD = "strong-password-123"
 
 
 class FakeInterviewLLM:
-    def __init__(self, decisions=None, fail_interviewer_after=None):
+    def __init__(
+        self,
+        decisions=None,
+        fail_interviewer_after=None,
+        interviewer_questions=None,
+    ):
         self.decisions = list(decisions or ["next_main_question"])
         self.fail_interviewer_after = fail_interviewer_after
+        self.interviewer_questions = list(interviewer_questions or [])
         self.interviewer_calls = 0
         self.calls = 0
 
@@ -67,12 +73,34 @@ class FakeInterviewLLM:
                 and self.interviewer_calls > self.fail_interviewer_after
             ):
                 return "invalid interviewer output"
+            intent_questions = {
+                "project_background": "请说明这段真实项目的项目背景和当时目标。",
+                "personal_responsibility": "在这段经历中，哪些工作由你亲自负责？",
+                "technical_decision": "请说明一个具体技术决策及其取舍依据。",
+                "challenge_solution": "最棘手的难点是什么，请说明实际解决步骤。",
+                "verifiable_result": "最终结果如何被验证？",
+                "collaboration_reflection": "请说明一次真实协作或复盘。",
+                "role_expertise": "这段经历体现了哪项岗位能力？",
+            }
+            target_intent = next(
+                (
+                    intent
+                    for intent in intent_questions
+                    if f'"intent": "{intent}"' in user_message
+                ),
+                "project_background",
+            )
+            question = (
+                self.interviewer_questions.pop(0)
+                if self.interviewer_questions
+                else intent_questions[target_intent]
+            )
             return (
                 '{"question":"Generated question '
                 f'{self.interviewer_calls}?",'
                 '"rationale":"grounded in evidence",'
                 '"evidence_limited":false}'
-            )
+            ).replace(f"Generated question {self.interviewer_calls}?", question)
         raise AssertionError("未预期的测试 LLM 调用")
 
 
@@ -327,6 +355,57 @@ def test_follow_up_is_limited_to_two_then_moves_forward(client, monkeypatch):
     assert response.status_code == 200
     assert response.json()["decision"]["action"] == "next_main_question"
     assert response.json()["current_question"]["main_question_number"] == 2
+
+
+def test_repeated_model_questions_retry_once_then_progress_and_save_distinct_turns(
+    client,
+    db_session,
+    monkeypatch,
+):
+    repeated_question = "请说明这段真实经历的项目背景。"
+    llm = FakeInterviewLLM(
+        decisions=["follow_up", "follow_up"],
+        interviewer_questions=[repeated_question] * 5,
+    )
+    install_fake_agents(monkeypatch, llm)
+    headers, _ = register_and_login(client, "alice")
+    session_id = create_session(client, headers)["id"]
+
+    main_question = start_session(client, headers, session_id).json()[
+        "current_question"
+    ]
+    first_follow_up = answer_turn(
+        client,
+        headers,
+        session_id,
+        main_question["id"],
+        answer="我参与了这个项目。",
+    ).json()["current_question"]
+    second_follow_up = answer_turn(
+        client,
+        headers,
+        session_id,
+        first_follow_up["id"],
+        answer="我参与了这个项目。",
+    ).json()["current_question"]
+
+    questions = [
+        main_question["question"],
+        first_follow_up["question"],
+        second_follow_up["question"],
+    ]
+    stored_turns = (
+        db_session.query(InterviewTurn)
+        .filter(InterviewTurn.session_id == session_id)
+        .order_by(InterviewTurn.sequence_number.asc())
+        .all()
+    )
+    assert llm.interviewer_calls == 5
+    assert len(set(questions)) == 3
+    assert [turn.question for turn in stored_turns] == questions
+    assert [turn.follow_up_number for turn in stored_turns] == [0, 1, 2]
+    assert "亲自负责" in first_follow_up["question"]
+    assert "技术选择" in second_follow_up["question"]
 
 
 def test_session_completes_after_planned_main_questions(client, monkeypatch):

@@ -17,11 +17,23 @@ def test_baseline_upgrade_downgrade_and_reupgrade(tmp_path):
     url = sqlite_url(database_path)
     config = alembic_config(url)
 
+    command.upgrade(config, "20260720_0002")
+    engine = create_engine(url)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO users "
+                "(username, password_hash, is_active, is_admin, created_at) "
+                "VALUES ('existing-user', 'unused', 1, 0, '2026-07-22T00:00:00')"
+            )
+        )
+    engine.dispose()
+
     command.upgrade(config, "head")
     engine = create_engine(url)
     try:
         tables = set(inspect(engine).get_table_names())
-        assert len(tables - {"alembic_version"}) == 25
+        assert len(tables - {"alembic_version"}) == 26
         assert {
             "auth_sessions",
             "auth_security_events",
@@ -33,6 +45,22 @@ def test_baseline_upgrade_downgrade_and_reupgrade(tmp_path):
             "worker_heartbeats",
             "maintenance_states",
         } <= tables
+        with engine.connect() as connection:
+            existing_user = connection.execute(
+                text(
+                    "SELECT is_quota_exempt, must_change_password, "
+                    "temporary_password_expires_at FROM users "
+                    "WHERE username = 'existing-user'"
+                )
+            ).one()
+            assert existing_user.is_quota_exempt in (False, 0)
+            assert existing_user.must_change_password in (False, 0)
+            assert existing_user.temporary_password_expires_at is None
+            indexes = {
+                item["name"]
+                for item in inspect(engine).get_indexes("password_reset_requests")
+            }
+            assert "ux_password_reset_requests_pending_user" in indexes
         assert compare_schema(engine, Base.metadata) == []
         assert get_schema_status(engine).ready is True
     finally:

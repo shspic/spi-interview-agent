@@ -2,10 +2,12 @@ import { useState } from "react";
 
 import { useAuth } from "../auth/authContext";
 import { getFriendlyErrorMessage } from "../utils/errorMessage";
+import AuthShell from "../components/AuthShell";
+import BrandLockup from "../components/BrandLockup";
 
 const USERNAME_PATTERN = /^[a-z0-9_]{3,32}$/;
 
-function AuthPage({ initialMode = "login", onModeChange }) {
+function AuthPage({ initialMode = "login", onModeChange, onPasswordReset }) {
   const { login, register } = useAuth();
   const mode = initialMode;
   const [username, setUsername] = useState("");
@@ -74,14 +76,11 @@ function AuthPage({ initialMode = "login", onModeChange }) {
   };
 
   return (
-    <main className="auth-page">
-      <section className="auth-card" aria-labelledby="auth-title">
+    <AuthShell>
+      <div className="auth-card" aria-labelledby="auth-title">
         <div className="auth-brand">
-          <span className="brand-mark">AI</span>
-          <div>
-            <p className="sidebar-kicker">NO.1 Agent Console</p>
-            <h1 id="auth-title">{isRegisterMode ? "创建账号" : "登录系统"}</h1>
-          </div>
+          <BrandLockup compact />
+          <h1 id="auth-title">{isRegisterMode ? "创建 AURORA 账号" : "登录 AURORA"}</h1>
         </div>
 
         <form className="auth-form" onSubmit={handleSubmit}>
@@ -98,7 +97,7 @@ function AuthPage({ initialMode = "login", onModeChange }) {
           />
           <p className="auth-help">3 至 32 位，只能使用小写字母、数字和下划线。</p>
 
-          <label htmlFor="password">密码</label>
+          <div className="auth-label-row"><label htmlFor="password">密码</label>{!isRegisterMode && <button type="button" className="auth-text-link" onClick={onPasswordReset}>忘记密码？申请重置</button>}</div>
           <div className="password-field">
             <input
               id="password"
@@ -162,8 +161,8 @@ function AuthPage({ initialMode = "login", onModeChange }) {
                 ? "正在注册..."
                 : "正在登录..."
               : isRegisterMode
-                ? "注册并进入系统"
-                : "登录"}
+                ? "注册并进入 AURORA"
+                : "登录 AURORA"}
           </button>
         </form>
 
@@ -175,8 +174,9 @@ function AuthPage({ initialMode = "login", onModeChange }) {
         >
           {isRegisterMode ? "已有账号？返回登录" : "没有账号？使用邀请码注册"}
         </button>
-      </section>
-    </main>
+        {isRegisterMode && <button type="button" className="auth-text-link auth-reset-secondary" onClick={onPasswordReset}>忘记密码？申请重置</button>}
+      </div>
+    </AuthShell>
   );
 }
 

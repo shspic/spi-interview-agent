@@ -294,7 +294,7 @@ def test_completion_generates_tasks_and_agent_run(
         session_id=interview_session.id,
         agent_name="improvement",
     ).one()
-    assert run.prompt_version == "interview-improvement-v1.0.0"
+    assert run.prompt_version == "improvement_v2"
     assert run.status == "success"
     assert run.latency_ms >= 0
 

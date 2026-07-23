@@ -3,6 +3,7 @@ from datetime import datetime
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.agents.question_progression import find_duplicate_question
 from app.db.models import FileRecord, InterviewSession, InterviewTurn, TargetJob
 
 MODE_MAIN_QUESTION_COUNTS = {
@@ -269,6 +270,26 @@ def create_interview_turn(
     normalized_question = question.strip()
     if not normalized_question:
         raise InterviewTrainingServiceError(400, "题目内容不能为空")
+    asked_questions = [
+        row.question
+        for row in (
+            db.query(InterviewTurn.question)
+            .filter(
+                InterviewTurn.session_id == session_id,
+                InterviewTurn.user_id == user_id,
+            )
+            .all()
+        )
+    ]
+    duplicate_question = find_duplicate_question(
+        normalized_question,
+        asked_questions,
+    )
+    if duplicate_question is not None:
+        raise InterviewTrainingServiceError(
+            409,
+            "题目与当前会话中已保存的问题重复或高度近似",
+        )
 
     follow_up_number = 0
     question_type = "main"

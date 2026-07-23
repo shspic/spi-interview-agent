@@ -108,3 +108,26 @@ export async function runAdminCleanup(confirm) {
   });
   return response.data;
 }
+
+export async function getPasswordResetRequests(params) {
+  const response = await apiClient.get("/api/admin/password-reset-requests", {
+    params: compactParams(params),
+  });
+  return response.data;
+}
+
+export async function approvePasswordResetRequest(requestId, adminNote) {
+  const response = await apiClient.post(
+    `/api/admin/password-reset-requests/${requestId}/approve`,
+    { admin_note: adminNote },
+  );
+  return response.data;
+}
+
+export async function rejectPasswordResetRequest(requestId, adminNote) {
+  const response = await apiClient.post(
+    `/api/admin/password-reset-requests/${requestId}/reject`,
+    { admin_note: adminNote },
+  );
+  return response.data;
+}

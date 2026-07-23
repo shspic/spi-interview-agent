@@ -109,6 +109,27 @@ def test_refresh_rotates_once_without_new_session_or_usage(client, db_session):
     assert repeated.json()["error_code"] == "refresh_failed"
 
 
+def test_permission_fields_are_current_across_login_refresh_and_me(
+    client,
+    db_session,
+):
+    register_and_login(client)
+    user = db_session.query(User).filter_by(username="alice").one()
+    user.is_admin = True
+    user.is_quota_exempt = True
+    db_session.commit()
+
+    login, _ = login_existing(client)
+    assert login.json()["user"]["is_admin"] is True
+    assert login.json()["user"]["is_quota_exempt"] is True
+    me = client.get("/api/auth/me")
+    assert me.json()["user"]["is_admin"] is True
+    assert me.json()["user"]["is_quota_exempt"] is True
+    refreshed = client.post("/api/auth/refresh")
+    assert refreshed.json()["user"]["is_admin"] is True
+    assert refreshed.json()["user"]["is_quota_exempt"] is True
+
+
 def test_refresh_ignores_body_token_and_clears_invalid_cookies(client):
     client.cookies.clear()
     response = client.post(
