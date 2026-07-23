@@ -1,5 +1,6 @@
 from collections.abc import Callable
 
+from app.agents.interview_context import build_interviewer_context
 from app.agents.prompts.interviewer_prompt import (
     INTERVIEWER_PROMPT_VERSION,
     build_interviewer_messages,
@@ -11,6 +12,7 @@ from app.agents.question_progression import (
 )
 from app.agents.schemas import InterviewerInput, InterviewerOutput
 from app.agents.structured_llm import invoke_structured
+from app.core.config import settings
 
 
 class InterviewerAgent:
@@ -55,8 +57,12 @@ class InterviewerAgent:
                 evidence_limited=True,
             )
 
+        context = build_interviewer_context(
+            payload,
+            budget_chars=settings.interview_context_char_budget,
+        )
         result = invoke_structured(
-            build_interviewer_messages(payload),
+            build_interviewer_messages(payload, context=context),
             InterviewerOutput,
             self.llm_call,
         )
@@ -69,6 +75,7 @@ class InterviewerAgent:
                 payload,
                 rejected_question=result.question,
                 rejection_reason=rejection_reason,
+                context=context,
             ),
             InterviewerOutput,
             self.llm_call,

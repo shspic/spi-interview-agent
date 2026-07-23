@@ -236,11 +236,11 @@ def test_prompt_contains_history_evidence_evaluation_coverage_and_single_target(
 
     content = build_interviewer_messages(payload)[1]["content"]
 
-    assert "已经问过的问题" in content
+    assert '"name": "recent_history"' in content
     assert "我参与了这个项目" in content
-    assert "用户资料证据" in content
+    assert '"name": "verified_user_evidence"' in content
     assert "个人职责仍不清晰" in content
     assert "负责全部模块" in content
-    assert "已覆盖能力维度" in content
-    assert "下一轮唯一目标" in content
+    assert '"covered_intents"' in content
+    assert '"name": "current_unique_goal"' in content
     assert "个人职责和责任边界" in content

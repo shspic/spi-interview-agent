@@ -215,7 +215,10 @@ def questions_are_similar(left: str, right: str) -> bool:
         return True
 
     shared_intents = infer_question_intents(left) & infer_question_intents(right)
-    return bool(shared_intents) and sequence_ratio >= 0.72 and ngram_jaccard >= 0.48
+    return bool(shared_intents) and (
+        (sequence_ratio >= 0.72 and ngram_jaccard >= 0.48)
+        or (sequence_ratio >= 0.55 and ngram_jaccard >= 0.30)
+    )
 
 
 def find_duplicate_question(candidate: str, asked_questions: list[str]) -> str | None:

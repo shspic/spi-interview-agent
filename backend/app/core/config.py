@@ -189,6 +189,11 @@ class Settings(BaseModel):
         ge=100,
         le=50_000,
     )
+    interview_context_char_budget: int = Field(
+        default=int(os.getenv("INTERVIEW_CONTEXT_CHAR_BUDGET", "12000")),
+        ge=1_000,
+        le=50_000,
+    )
     max_job_description_chars: int = Field(
         default=int(os.getenv("MAX_JOB_DESCRIPTION_CHARS", "30000")),
         ge=1_000,

@@ -274,7 +274,7 @@ def test_scores_total_conflicts_and_full_response_are_saved(
         )
         .one()
     )
-    assert evaluation_run.prompt_version == "interview-evaluation-v1.1.0"
+    assert evaluation_run.prompt_version == "evaluator_v2"
     assert evaluation_run.status == "success"
 
 
