@@ -36,4 +36,4 @@
 - 管理端：`/admin` 查看用量、审计、任务与脱敏 Worker 状态。
 - 部署：HTTPS host proxy → frontend → API，Worker/PostgreSQL 不公开。
 
-结束语：“这是一个本地 Release Candidate，工程门禁和未验证项都明确列出；没有把公网、并发规模或真实模型质量说成已经验证。”
+结束语：“项目已完成单机 HTTPS 公网部署，公开入口和基础 readiness 已核验；登录后完整业务、并发规模和真实模型质量仍按未完成项如实说明。”

@@ -2,6 +2,8 @@
 
 本项目采用同站点架构：浏览器只访问 `https://<域名>/` 与 `/api/`。PostgreSQL 和 Worker 不映射宿主机公网端口。本文不代替云平台、DNS 或证书供应商文档，也不会自动购买或部署任何资源。
 
+> 当前实例：<https://43.153.181.237:8443/>。2026-08-11 已通过真实浏览器和匿名接口验证登录页、TLS、`/api/health/live` 与 `/api/health/ready`；readiness 显示 PostgreSQL、Schema、存储、任务系统和 Worker 均就绪。该结果证明单机公网实例可访问，不等于大规模并发、高可用、备份恢复或全部登录后业务已验收。当前使用 IP 地址证书，应持续监控自动续期；仓库不记录证书私钥或真实 Secret。
+
 ## 1. Preflight
 
 1. 由用户按 Docker 官方文档安装受支持的 Docker Engine 与 Compose 插件。

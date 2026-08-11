@@ -1,6 +1,6 @@
 # 数据库迁移
 
-当前 head 为 `20260720_0002`。`0001` 保留已接管业务基线，`0002` 增加后台任务、Worker、维护表和 Resume 幂等字段，并修复 PostgreSQL 活跃岗位部分唯一索引。空 SQLite/PostgreSQL 必须通过 `alembic upgrade head` 初始化，禁止用 `Base.metadata.create_all()` 绕过。
+当前 head 为 `20260723_0004`。`0001` 保留已接管业务基线；`0002` 增加后台任务、Worker、维护表和 Resume 幂等字段，并修复 PostgreSQL 活跃岗位部分唯一索引；`0003` 增加用户配额豁免；`0004` 增加管理员审批式密码恢复与强制改密字段。空 SQLite/PostgreSQL 必须通过 `alembic upgrade head` 初始化，禁止用 `Base.metadata.create_all()` 绕过。
 
 ## 1. 接管边界
 
@@ -49,4 +49,4 @@ cd D:\spir\NO1_agent\backend
 
 迁移测试使用临时 SQLite，验证空库 upgrade、20 张表、索引/约束/外键、downgrade/re-upgrade、Schema 拒绝和备份可读性。测试通过 `SKIP_DOTENV=1` 与内存/临时 URL，不读取真实 `.env` 或开发数据库。
 
-生产执行 upgrade 前必须有可恢复备份和维护窗口；不得把密码放入 `alembic.ini` 或日志。当前仍是单机 SQLite。未来迁移 PostgreSQL 时应新增独立 revision 和数据验证流程，不复用 SQLite 文件级假设。
+生产执行 upgrade 前必须有可恢复备份和维护窗口；不得把密码放入 `alembic.ini` 或日志。本地开发仍可使用单机 SQLite；2026-08-11 公网实例 readiness 已确认生产数据库类型为 PostgreSQL 且 `schema_ready=true`。匿名健康接口不公开具体 revision，因此线上是否精确处于 `20260723_0004` 仍应通过受控发布记录或服务器内 `alembic current` 核验，不能仅凭 readiness 推断。

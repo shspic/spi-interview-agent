@@ -10,7 +10,7 @@
 - [ ] `docker compose config --quiet`
 - [ ] `python -m scripts.release_preflight --dry-run`
 - [ ] `git diff --check` 与敏感信息扫描
-- [ ] `npm audit --omit=dev --audit-level=high` 无未接受的高风险项；当前 Axios 的 Node 侧传递依赖 `form-data 4.0.5` 报告 2 个 high，上游 `4.0.6` 已修复但本次环境无法更新锁文件，发布前必须升级并重跑审计、lint 和 build
+- [ ] `npm audit --omit=dev --audit-level=high` 无未接受的高风险项；当前本地依赖树为 `axios 1.18.0 → form-data 4.0.6`，旧 `4.0.5` 风险说明已失效，但仍需在可联网环境重跑 audit、lint 和 build 后才能勾选
 
 ## Docker/PostgreSQL 手动门禁
 

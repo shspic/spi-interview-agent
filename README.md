@@ -5,7 +5,7 @@
 
 一个面向 AI 应用与 Python 后端求职者的证据驱动训练工作台：把个人资料、目标岗位、结构化面试、评价、改进复练和简历表达串成可恢复的完整流程。
 
-> 当前交付状态：本地 Release Candidate。没有声称已公网部署、完成真实 DeepSeek 人工验收或通过本机 PostgreSQL/Docker 运行验证；准确门禁结果以本次最终验收报告为准。
+> 当前交付状态：已完成单机 Docker Compose 公网部署，入口为 <https://43.153.181.237:8443/>。2026-08-11 通过真实浏览器与匿名健康检查确认：登录页可访问，`/api/health/live` 返回 alive，`/api/health/ready` 返回 ready，PostgreSQL、Schema、存储、任务系统与 Worker 均就绪。匿名接口未暴露构建 commit，因此“线上实例与当前工作树完全一致”仍需发布版本标识证明；真实 DeepSeek 输出质量也仍以独立人工验收为准。
 
 ## 适用场景与核心能力
 
@@ -122,7 +122,7 @@ npm run build
 npm run test:e2e
 ```
 
-本次 Release Candidate 本地实测为后端 `363 passed, 3 skipped`；3 个 PostgreSQL marker 因 Docker daemon/安全测试库不可用而跳过。Mock 为 `81/81`，Retrieval 为 `20/20`。Playwright 静态发现 10 条，真实 CLI 浏览器冒烟已完成；Playwright Test 匹配版 Chromium 下载受限，自动套件未伪装为通过。E2E 使用纯虚构 API fixture，不访问公网或真实模型。
+当前后端静态收集为 `413 tests`；最近一次完整隔离回归记录为 `410 passed, 3 skipped`，跳过项是需要显式 PostgreSQL 测试库的集成测试。2026-08-11 重新收集确认仍为 413 项；本轮全量重跑在 180 秒上限内执行到 52% 且未出现失败，但未完成，因此不把本轮写成 413 项通过。Mock 评估最近完整记录为 `81/81`，Retrieval 为 `20/20`。Playwright 当前静态收集 `43 tests`；公网仅完成登录页、CSRF、live/readiness 的匿名冒烟，不能声称 43 项线上全部通过。E2E fixture 不访问真实模型，也不能替代登录后的完整线上业务验收。
 
 ## Live Harness
 
@@ -179,18 +179,17 @@ docs/               架构、部署、演示、简历和面试材料
 
 ## 已知局限
 
-- 当前 `npm audit --omit=dev --audit-level=high` 会报告 Axios 的 Node 侧传递依赖 `form-data 4.0.5` 存在 2 个 high 风险项。上游已发布 `4.0.6` 修复版，但本次环境无法写 npm cache，未能更新锁文件；本项不应被表述为依赖审计通过。浏览器生产包使用原生 `FormData`，公网发布前仍必须升级并重跑审计、lint 和 build。
-
-- 当前是单机 Compose 交付，不声称大规模高并发或公网运营验证。
+- `axios` 当前为 `1.18.0`，传递依赖 `form-data` 已锁定到 `4.0.6`，旧文档中的 `4.0.5` 风险说明已经失效；本轮未重新执行联网 `npm audit`，因此仍不声称依赖审计完全无风险。
+- 当前是单机 Compose 公网部署，已验证公开入口与基础 readiness；未经过真实用户运营、大规模并发、高可用或故障切换验证。
 - 不支持 CSV、Excel、图片 OCR，也未更换 BGE embedding。
 - SQLite 只适合本地单 Worker；生产并发路径要求 PostgreSQL。
 - Live DeepSeek 质量需要用户后续付费、显式确认并人工验收。
 - Chroma、uploads 与 PostgreSQL 的一致备份仍需要维护窗口协调。
-- E2E fixture 验证浏览器主流程，不能替代真实 Docker/PostgreSQL 环境冒烟。
+- E2E fixture 验证浏览器主流程；公网 readiness 已确认 PostgreSQL 与 Worker 就绪，但登录后的真实文件、RAG、面试和后台任务闭环仍需线上人工验收。
 
 ## Roadmap
 
-优先完成真实 PostgreSQL/Docker 恢复演练、真实模型人工评分和公网前的安全复核；不计划为当前 RC 引入 Redis、Celery、Kafka、RabbitMQ 或 Kubernetes。
+优先完成线上备份恢复演练、证书自动续期监控、登录后核心业务冒烟、真实模型人工评分和可回滚发布版本标识；不计划仅为扩大技术栈引入 Redis、Celery、Kafka、RabbitMQ 或 Kubernetes。
 
 ## License
 
